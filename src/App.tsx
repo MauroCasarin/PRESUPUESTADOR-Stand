@@ -98,6 +98,7 @@ export default function App() {
   const [showSueModal, setShowSueModal] = useState(false);
   const [suePassword, setSuePassword] = useState('');
   const [isSueUnlocked, setIsSueUnlocked] = useState(false);
+  const [selectedQuoteDetails, setSelectedQuoteDetails] = useState<any | null>(null);
 
   const currentMonthName = new Date().toLocaleString('es-AR', { month: 'long' });
   const capitalizedCurrentMonth = currentMonthName.charAt(0).toUpperCase() + currentMonthName.slice(1);
@@ -184,12 +185,25 @@ export default function App() {
   const basePrice = (BASE_PRICES[selectedSize as keyof typeof BASE_PRICES] || 0) * ipcMultiplier;
   const freightPrice = (cityData.distance * 5500) * ipcMultiplier;
   
+  const eventDays = useMemo(() => {
+    if (!fechaInicio || !fechaFin) return 1;
+    const start = new Date(fechaInicio);
+    const end = new Date(fechaFin);
+    const diffTime = Math.abs(end.getTime() - start.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays + 1;
+  }, [fechaInicio, fechaFin]);
+
   const extrasTotal = useMemo(() => {
     return EXTRAS.reduce((total, extra) => {
       const qty = extrasQty[extra.id] || 0;
-      return total + (extra.price * ipcMultiplier * qty);
+      let extraPrice = extra.price * ipcMultiplier * qty;
+      if (extra.id.startsWith('tv')) {
+        extraPrice *= eventDays;
+      }
+      return total + extraPrice;
     }, 0);
-  }, [extrasQty, ipcMultiplier]);
+  }, [extrasQty, ipcMultiplier, eventDays]);
 
   const grandTotal = basePrice + freightPrice + extrasTotal;
 
@@ -474,7 +488,7 @@ export default function App() {
                         </div>
                         <div className="w-16 sm:w-20 text-right">
                           <span className="text-[11px] sm:text-xs font-medium text-gray-900">
-                            {qty > 0 ? formatCurrency(qty * extra.price * ipcMultiplier) : '-'}
+                            {qty > 0 ? formatCurrency(qty * extra.price * ipcMultiplier * (extra.id.startsWith('tv') ? eventDays : 1)) : '-'}
                           </span>
                         </div>
                       </div>
@@ -589,7 +603,10 @@ export default function App() {
                       <ul className="bg-gray-50/50 divide-y divide-gray-100 border-t border-gray-100">
                         {(quotes as any[]).map(quote => (
                           <li key={quote.id} className="p-2 sm:p-3 pl-4 sm:pl-6 flex flex-col gap-2 hover:bg-gray-100/50 transition-colors">
-                            <div className="flex justify-between items-start gap-2">
+                            <div 
+                              className="flex justify-between items-start gap-2 cursor-pointer"
+                              onClick={() => setSelectedQuoteDetails(quote)}
+                            >
                               <div className="min-w-0 flex-1">
                                 <h3 className="text-[11px] sm:text-xs font-medium text-gray-900 truncate">{quote.evento}</h3>
                                 <p className="text-[9px] sm:text-[10px] text-gray-500 truncate mt-0.5">
@@ -610,13 +627,13 @@ export default function App() {
                             </div>
                             <div className="flex justify-end gap-2 mt-1">
                               <button 
-                                onClick={() => handleEdit(quote)}
+                                onClick={(e) => { e.stopPropagation(); handleEdit(quote); }}
                                 className="flex items-center gap-1 text-[10px] text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-1 rounded transition-colors"
                               >
                                 <Edit2 className="w-3 h-3" /> Editar
                               </button>
                               <button 
-                                onClick={() => setDeleteConfirmId(quote.id)}
+                                onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(quote.id); }}
                                 className="flex items-center gap-1 text-[10px] text-red-600 hover:text-red-800 bg-red-50 px-2 py-1 rounded transition-colors"
                               >
                                 <Trash2 className="w-3 h-3" /> Eliminar
@@ -721,6 +738,123 @@ export default function App() {
                 </p>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Quote Details Modal */}
+      {selectedQuoteDetails && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-4 sm:p-5 overflow-hidden animate-in fade-in zoom-in duration-200 relative max-h-[90vh] flex flex-col">
+            <button 
+              onClick={() => setSelectedQuoteDetails(null)}
+              className="absolute top-2 right-2 p-1.5 text-gray-400 hover:text-gray-600 rounded-full transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            
+            <div className="flex items-center gap-2 mb-4 border-b border-gray-100 pb-3">
+              <div className="bg-blue-100 p-2 rounded-md">
+                <Receipt className="w-5 h-5 text-blue-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">{selectedQuoteDetails.evento}</h3>
+                <p className="text-xs text-gray-500">{selectedQuoteDetails.cliente}</p>
+              </div>
+            </div>
+
+            <div className="overflow-y-auto flex-1 pr-2 space-y-4">
+              <div className="grid grid-cols-2 gap-3 bg-gray-50 p-3 rounded-lg border border-gray-100">
+                <div>
+                  <p className="text-[10px] text-gray-500 uppercase font-semibold tracking-wider">Fechas</p>
+                  <p className="text-xs font-medium text-gray-900 mt-0.5">
+                    {selectedQuoteDetails.fechaInicio ? new Date(selectedQuoteDetails.fechaInicio).toLocaleDateString('es-AR') : '-'} al {selectedQuoteDetails.fechaFin ? new Date(selectedQuoteDetails.fechaFin).toLocaleDateString('es-AR') : '-'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-gray-500 uppercase font-semibold tracking-wider">Ubicación</p>
+                  <p className="text-xs font-medium text-gray-900 mt-0.5">{selectedQuoteDetails.selectedCity}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-gray-500 uppercase font-semibold tracking-wider">Tamaño</p>
+                  <p className="text-xs font-medium text-gray-900 mt-0.5">{selectedQuoteDetails.selectedSize} m²</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-gray-500 uppercase font-semibold tracking-wider">Fecha Presupuesto</p>
+                  <p className="text-xs font-medium text-gray-900 mt-0.5">
+                    {selectedQuoteDetails.createdAt?.toDate ? selectedQuoteDetails.createdAt.toDate().toLocaleDateString('es-AR') : '-'}
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-xs font-bold text-gray-900 mb-2 uppercase tracking-wider">Desglose</h4>
+                <div className="space-y-2 bg-white border border-gray-200 rounded-lg p-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-600">Stand Base</span>
+                    <span className="text-xs font-medium text-gray-900">{formatCurrency(selectedQuoteDetails.basePrice)}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-600">Flete</span>
+                    <span className="text-xs font-medium text-gray-900">{formatCurrency(selectedQuoteDetails.freightPrice)}</span>
+                  </div>
+                  
+                  {selectedQuoteDetails.extrasQty && Object.keys(selectedQuoteDetails.extrasQty).length > 0 && (
+                    <div className="pt-2 mt-2 border-t border-gray-100">
+                      <p className="text-[10px] text-gray-500 font-semibold mb-1">Adicionales:</p>
+                      {Object.entries(selectedQuoteDetails.extrasQty).map(([extraId, qty]) => {
+                        if ((qty as number) <= 0) return null;
+                        const extraDef = EXTRAS.find(e => e.id === extraId);
+                        if (!extraDef) return null;
+                        
+                        let extraPrice = extraDef.price * (1 + (selectedQuoteDetails.ipcValue || 0) / 100) * (qty as number);
+                        if (extraId.startsWith('tv')) {
+                           const start = new Date(selectedQuoteDetails.fechaInicio);
+                           const end = new Date(selectedQuoteDetails.fechaFin);
+                           const diffTime = Math.abs(end.getTime() - start.getTime());
+                           const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                           const eventDays = diffDays + 1;
+                           extraPrice *= eventDays;
+                        }
+
+                        return (
+                          <div key={extraId} className="flex justify-between items-center pl-2 mt-1">
+                            <span className="text-[11px] text-gray-600">• {extraDef.name} (x{qty as number})</span>
+                            <span className="text-[11px] font-medium text-gray-900">{formatCurrency(extraPrice)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 flex justify-between items-center">
+                <span className="text-sm font-bold text-blue-900">Total Estimado</span>
+                <span className="text-lg font-bold text-blue-700">{formatCurrency(selectedQuoteDetails.grandTotal)}</span>
+              </div>
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-gray-100 flex justify-end gap-2 shrink-0">
+              <button 
+                onClick={() => {
+                  handleEdit(selectedQuoteDetails);
+                  setSelectedQuoteDetails(null);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors"
+              >
+                <Edit2 className="w-4 h-4" /> Editar
+              </button>
+              <button 
+                onClick={() => {
+                  setDeleteConfirmId(selectedQuoteDetails.id);
+                  setSelectedQuoteDetails(null);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-700 bg-red-50 hover:bg-red-100 rounded-md transition-colors"
+              >
+                <Trash2 className="w-4 h-4" /> Eliminar
+              </button>
+            </div>
           </div>
         </div>
       )}
