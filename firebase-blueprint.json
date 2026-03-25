@@ -5,10 +5,6 @@
       "description": "A saved quote/presupuesto for a stand.",
       "type": "object",
       "properties": {
-        "userId": {
-          "type": "string",
-          "description": "The UID of the user who created the quote."
-        },
         "cliente": {
           "type": "string",
           "description": "Name of the client."
@@ -58,7 +54,7 @@
           "description": "When the quote was created."
         }
       },
-      "required": ["userId", "cliente", "evento", "selectedCity", "selectedSize", "extrasQty", "ipcMonth", "ipcValue", "basePrice", "freightPrice", "extrasTotal", "grandTotal", "createdAt"]
+      "required": ["cliente", "evento", "selectedCity", "selectedSize", "extrasQty", "ipcMonth", "ipcValue", "basePrice", "freightPrice", "extrasTotal", "grandTotal", "createdAt"]
     }
   },
   "firestore": {

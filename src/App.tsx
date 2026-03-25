@@ -2,7 +2,6 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Calculator, 
   MapPin, 
-  Maximize, 
   MonitorPlay, 
   Image as ImageIcon, 
   Layers, 
@@ -12,13 +11,10 @@ import {
   Receipt,
   TrendingUp,
   Save,
-  List,
-  LogOut,
-  LogIn
+  List
 } from 'lucide-react';
-import { auth, db, loginWithGoogle, logout } from './firebase';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import { collection, addDoc, getDocs, query, where, orderBy, serverTimestamp } from 'firebase/firestore';
+import { db } from './firebase';
+import { collection, addDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 
 // --- DATA EXTRACTED FROM EXCEL ---
 const BASE_PRICES = {
@@ -81,29 +77,18 @@ const formatCurrency = (amount: number) => {
 };
 
 export default function App() {
-  const [user, setUser] = useState<User | null>(null);
-  const [isAuthReady, setIsAuthReady] = useState(false);
-  const [showSaved, setShowSaved] = useState(false);
-  const [savedQuotes, setSavedQuotes] = useState<any[]>([]);
-  const [isSaving, setIsSaving] = useState(false);
-
   const [cliente, setCliente] = useState<string>('');
   const [evento, setEvento] = useState<string>('');
   const [selectedCity, setSelectedCity] = useState<string>(CITIES[0].name);
   const [selectedSize, setSelectedSize] = useState<string>("4");
   const [extrasQty, setExtrasQty] = useState<Record<string, number>>({});
   const [ipcData, setIpcData] = useState<{ month: string, value: number, loading: boolean }>({ month: '', value: 0, loading: true });
+  
+  const [savedQuotes, setSavedQuotes] = useState<any[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
 
   const currentMonthName = new Date().toLocaleString('es-AR', { month: 'long' });
   const capitalizedCurrentMonth = currentMonthName.charAt(0).toUpperCase() + currentMonthName.slice(1);
-
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setIsAuthReady(true);
-    });
-    return () => unsubscribe();
-  }, []);
 
   useEffect(() => {
     fetch('https://api.argentinadatos.com/v1/finanzas/indices/inflacion')
@@ -123,6 +108,27 @@ export default function App() {
         console.error("Error fetching IPC:", err);
         setIpcData(prev => ({ ...prev, loading: false }));
       });
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, 'quotes'), (snapshot) => {
+      const quotes = snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
+      quotes.sort((a, b) => {
+        const cA = (a.cliente || '').toLowerCase();
+        const cB = (b.cliente || '').toLowerCase();
+        if (cA < cB) return -1;
+        if (cA > cB) return 1;
+        const eA = (a.evento || '').toLowerCase();
+        const eB = (b.evento || '').toLowerCase();
+        if (eA < eB) return -1;
+        if (eA > eB) return 1;
+        return 0;
+      });
+      setSavedQuotes(quotes);
+    }, (error) => {
+      console.error("Error fetching quotes:", error);
+    });
+    return () => unsubscribe();
   }, []);
 
   const handleExtraChange = (id: string, delta: number) => {
@@ -159,10 +165,6 @@ export default function App() {
   const grandTotal = basePrice + freightPrice + extrasTotal;
 
   const handleSaveQuote = async () => {
-    if (!user) {
-      await loginWithGoogle();
-      return;
-    }
     if (!cliente || !evento) {
       alert("Por favor ingresa Cliente y Evento para guardar el presupuesto.");
       return;
@@ -171,7 +173,6 @@ export default function App() {
     setIsSaving(true);
     try {
       await addDoc(collection(db, 'quotes'), {
-        userId: user.uid,
         cliente,
         evento,
         selectedCity,
@@ -194,171 +195,84 @@ export default function App() {
     }
   };
 
-  const loadSavedQuotes = async () => {
-    if (!user) return;
-    try {
-      const q = query(
-        collection(db, 'quotes'),
-        where('userId', '==', user.uid),
-        orderBy('createdAt', 'desc')
-      );
-      const snapshot = await getDocs(q);
-      const quotes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setSavedQuotes(quotes);
-      setShowSaved(true);
-    } catch (error) {
-      console.error("Error loading quotes", error);
-    }
-  };
-
-  if (showSaved) {
-    return (
-      <div className="min-h-screen bg-gray-50 text-gray-900 font-sans p-4 sm:p-8">
-        <div className="max-w-4xl mx-auto">
-          <div className="flex justify-between items-center mb-6">
-            <h1 className="text-2xl font-bold">Presupuestos Guardados</h1>
-            <button 
-              onClick={() => setShowSaved(false)}
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-sm font-medium transition-colors"
-            >
-              Volver al Cotizador
-            </button>
-          </div>
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-            {savedQuotes.length === 0 ? (
-              <div className="p-8 text-center text-gray-500">No hay presupuestos guardados.</div>
-            ) : (
-              <ul className="divide-y divide-gray-100">
-                {savedQuotes.map(quote => (
-                  <li key={quote.id} className="p-4 hover:bg-gray-50 transition-colors">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="font-semibold text-gray-900">{quote.cliente} - {quote.evento}</h3>
-                        <p className="text-sm text-gray-500 mt-1">
-                          {quote.selectedCity} • {quote.selectedSize}m² • IPC {quote.ipcMonth} ({quote.ipcValue}%)
-                        </p>
-                        <p className="text-xs text-gray-400 mt-1">
-                          {quote.createdAt?.toDate ? quote.createdAt.toDate().toLocaleString('es-AR') : ''}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-bold text-lg text-gray-900">{formatCurrency(quote.grandTotal)}</p>
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900 font-sans selection:bg-blue-200">
+    <div className="min-h-screen bg-gray-50 text-gray-900 font-sans selection:bg-blue-200 flex flex-col">
       {/* Header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="bg-blue-600 p-2 rounded-lg">
-              <Calculator className="w-5 h-5 text-white" />
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 h-12 flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <div className="bg-blue-600 p-1.5 rounded-md">
+              <Calculator className="w-4 h-4 text-white" />
             </div>
-            <h1 className="text-xl font-bold tracking-tight text-gray-900">Cotizador de Stands</h1>
+            <h1 className="text-sm sm:text-base font-bold tracking-tight text-gray-900">Cotizador</h1>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {!ipcData.loading && ipcData.month && (
-              <div className="flex items-center gap-1.5 text-xs font-medium text-blue-700 bg-blue-50 px-3 py-1 rounded-full border border-blue-200 shadow-sm hidden sm:flex">
-                <TrendingUp className="w-3.5 h-3.5" />
+              <div className="flex items-center gap-1 text-[10px] sm:text-xs font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200 shadow-sm">
+                <TrendingUp className="w-3 h-3" />
                 <span>IPC {ipcData.month}: {ipcData.value}%</span>
               </div>
             )}
-            <div className="text-sm font-medium text-gray-500 bg-gray-100 px-3 py-1 rounded-full hidden sm:block">
+            <div className="text-[10px] sm:text-xs font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
               Tarifas {capitalizedCurrentMonth} 2026
             </div>
-            {isAuthReady && user ? (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={loadSavedQuotes}
-                  className="flex items-center gap-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  <List className="w-4 h-4" />
-                  <span className="hidden sm:inline">Ver Guardados</span>
-                </button>
-                <button
-                  onClick={logout}
-                  className="p-1.5 text-gray-500 hover:text-gray-700 transition-colors"
-                  title="Cerrar sesión"
-                >
-                  <LogOut className="w-5 h-5" />
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={loginWithGoogle}
-                className="flex items-center gap-1.5 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors"
-              >
-                <LogIn className="w-4 h-4" />
-                <span>Ingresar</span>
-              </button>
-            )}
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 py-4">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-2 sm:px-4 py-3 flex flex-col gap-3">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3">
           
           {/* Left Column: Configuration */}
-          <div className="lg:col-span-8 space-y-4">
+          <div className="lg:col-span-8 flex flex-col gap-3">
             
             {/* Datos del Presupuesto */}
-            <section className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-              <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <label htmlFor="cliente" className="block text-xs font-medium text-gray-700">Cliente</label>
+            <section className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              <div className="p-2 sm:p-3 grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <label htmlFor="cliente" className="block text-[10px] sm:text-xs font-medium text-gray-700">Cliente</label>
                   <input
                     type="text"
                     id="cliente"
                     value={cliente}
                     onChange={(e) => setCliente(e.target.value)}
-                    placeholder="Nombre del cliente"
-                    className="w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-50 py-2 px-3 text-sm border"
+                    placeholder="Nombre"
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-50 py-1.5 px-2 text-xs border"
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <label htmlFor="evento" className="block text-xs font-medium text-gray-700">Evento</label>
+                <div className="space-y-1">
+                  <label htmlFor="evento" className="block text-[10px] sm:text-xs font-medium text-gray-700">Evento</label>
                   <input
                     type="text"
                     id="evento"
                     value={evento}
                     onChange={(e) => setEvento(e.target.value)}
-                    placeholder="Nombre del evento"
-                    className="w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-50 py-2 px-3 text-sm border"
+                    placeholder="Evento"
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-50 py-1.5 px-2 text-xs border"
                   />
                 </div>
               </div>
             </section>
 
             {/* Section 1: Base Configuration */}
-            <section className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-              <div className="px-4 py-3 border-b border-gray-100 bg-gray-50/50">
-                <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-blue-600" />
+            <section className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              <div className="px-3 py-2 border-b border-gray-100 bg-gray-50/50">
+                <h2 className="text-xs sm:text-sm font-semibold text-gray-900 flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-blue-600" />
                   Ubicación y Tamaño
                 </h2>
               </div>
-              <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-2 sm:p-3 grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
                 {/* City Selection */}
-                <div className="space-y-2">
-                  <label htmlFor="city" className="block text-xs font-medium text-gray-700">
+                <div className="space-y-1">
+                  <label htmlFor="city" className="block text-[10px] sm:text-xs font-medium text-gray-700">
                     Ciudad de Armado
                   </label>
                   <select
                     id="city"
                     value={selectedCity}
                     onChange={(e) => setSelectedCity(e.target.value)}
-                    className="w-full rounded-lg border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-50 py-2 px-3 text-sm border appearance-none"
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-50 py-1.5 px-2 text-xs border appearance-none"
                   >
                     {CITIES.map(city => (
                       <option key={city.name} value={city.name}>
@@ -369,22 +283,22 @@ export default function App() {
                 </div>
 
                 {/* Size Selection */}
-                <div className="space-y-2">
-                  <label className="block text-xs font-medium text-gray-700">
-                    Tamaño del Stand (m²)
+                <div className="space-y-1">
+                  <label className="block text-[10px] sm:text-xs font-medium text-gray-700">
+                    Tamaño (m²)
                   </label>
-                  <div className="grid grid-cols-4 gap-2">
+                  <div className="grid grid-cols-4 gap-1">
                     {SIZES.map(size => (
                       <button
                         key={size}
                         onClick={() => setSelectedSize(size)}
-                        className={`py-2 px-2 rounded-lg border text-sm font-medium transition-all ${
+                        className={`py-1.5 px-1 rounded-md border text-xs font-medium transition-all ${
                           selectedSize === size
-                            ? 'bg-blue-600 border-blue-600 text-white shadow-md'
+                            ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
                             : 'bg-white border-gray-200 text-gray-700 hover:border-blue-300 hover:bg-blue-50'
                         }`}
                       >
-                        {size} m²
+                        {size}
                       </button>
                     ))}
                   </div>
@@ -393,11 +307,11 @@ export default function App() {
             </section>
 
             {/* Section 2: Extras */}
-            <section className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-              <div className="px-4 py-3 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
-                <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
-                  <Plus className="w-4 h-4 text-blue-600" />
-                  Adicionales y Equipamiento
+            <section className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              <div className="px-3 py-2 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
+                <h2 className="text-xs sm:text-sm font-semibold text-gray-900 flex items-center gap-1.5">
+                  <Plus className="w-3.5 h-3.5 text-blue-600" />
+                  Adicionales
                 </h2>
               </div>
               <div className="divide-y divide-gray-100">
@@ -405,27 +319,27 @@ export default function App() {
                   const Icon = extra.icon;
                   const qty = extrasQty[extra.id] || 0;
                   return (
-                    <div key={extra.id} className="p-3 sm:px-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-gray-50/50 transition-colors">
-                      <div className="flex items-center gap-3">
-                        <div className="bg-blue-100 p-2 rounded-lg text-blue-700">
-                          <Icon className="w-4 h-4" />
+                    <div key={extra.id} className="p-1.5 sm:p-2 flex items-center justify-between gap-2 hover:bg-gray-50/50 transition-colors">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <div className="bg-blue-100 p-1.5 rounded-md text-blue-700 shrink-0">
+                          <Icon className="w-3.5 h-3.5" />
                         </div>
-                        <div>
-                          <h3 className="text-sm font-medium text-gray-900">{extra.name}</h3>
-                          <p className="text-xs text-gray-500 mt-0.5">
-                            {formatCurrency(extra.price * ipcMultiplier)} / {extra.unit}
+                        <div className="truncate">
+                          <h3 className="text-[11px] sm:text-xs font-medium text-gray-900 truncate">{extra.name}</h3>
+                          <p className="text-[9px] sm:text-[10px] text-gray-500 truncate">
+                            {formatCurrency(extra.price * ipcMultiplier)}/{extra.unit}
                           </p>
                         </div>
                       </div>
                       
-                      <div className="flex items-center gap-3 self-end sm:self-auto">
-                        <div className="flex items-center bg-gray-100 rounded-lg border border-gray-200 p-1">
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex items-center bg-gray-100 rounded-md border border-gray-200 p-0.5">
                           <button 
                             onClick={() => handleExtraChange(extra.id, -1)}
-                            className="p-1.5 text-gray-600 hover:text-gray-900 hover:bg-white rounded-md transition-colors disabled:opacity-50"
+                            className="p-1 text-gray-600 hover:text-gray-900 hover:bg-white rounded transition-colors disabled:opacity-50"
                             disabled={qty === 0}
                           >
-                            <Minus className="w-4 h-4" />
+                            <Minus className="w-3 h-3" />
                           </button>
                           <input 
                             type="number" 
@@ -433,17 +347,17 @@ export default function App() {
                             value={qty || ''}
                             onChange={(e) => handleExtraInputChange(extra.id, e.target.value)}
                             placeholder="0"
-                            className="w-12 text-center bg-transparent border-none focus:ring-0 text-sm font-medium p-0"
+                            className="w-6 sm:w-8 text-center bg-transparent border-none focus:ring-0 text-xs font-medium p-0"
                           />
                           <button 
                             onClick={() => handleExtraChange(extra.id, 1)}
-                            className="p-1.5 text-gray-600 hover:text-gray-900 hover:bg-white rounded-md transition-colors"
+                            className="p-1 text-gray-600 hover:text-gray-900 hover:bg-white rounded transition-colors"
                           >
-                            <Plus className="w-4 h-4" />
+                            <Plus className="w-3 h-3" />
                           </button>
                         </div>
-                        <div className="w-24 text-right">
-                          <span className="text-sm font-medium text-gray-900">
+                        <div className="w-16 sm:w-20 text-right">
+                          <span className="text-[11px] sm:text-xs font-medium text-gray-900">
                             {qty > 0 ? formatCurrency(qty * extra.price * ipcMultiplier) : '-'}
                           </span>
                         </div>
@@ -458,58 +372,48 @@ export default function App() {
 
           {/* Right Column: Summary (Sticky) */}
           <div className="lg:col-span-4">
-            <div className="bg-gray-900 rounded-xl shadow-xl border border-gray-800 text-white sticky top-20 overflow-hidden">
-              <div className="p-4 border-b border-gray-800">
-                <h2 className="text-base font-semibold flex items-center gap-2">
+            <div className="bg-gray-900 rounded-lg shadow-xl border border-gray-800 text-white sticky top-14 overflow-hidden">
+              <div className="p-3 border-b border-gray-800">
+                <h2 className="text-sm font-semibold flex items-center gap-1.5">
                   <Receipt className="w-4 h-4 text-blue-400" />
-                  Resumen de Presupuesto
+                  Resumen
                 </h2>
               </div>
               
-              <div className="p-4 space-y-4">
+              <div className="p-3 space-y-3">
                 {/* Breakdown */}
-                <div className="space-y-4">
+                <div className="space-y-2">
                   <div className="flex justify-between items-start">
                     <div>
-                      <p className="text-sm text-gray-400">Stand Base ({selectedSize} m²)</p>
-                      <p className="text-xs text-gray-500 mt-0.5">Precio Capital Federal</p>
+                      <p className="text-xs text-gray-400">Stand ({selectedSize} m²)</p>
                     </div>
-                    <p className="text-sm font-medium">{formatCurrency(basePrice)}</p>
+                    <p className="text-xs font-medium">{formatCurrency(basePrice)}</p>
                   </div>
 
                   <div className="flex justify-between items-start">
                     <div>
-                      <p className="text-sm text-gray-400 flex items-center gap-1.5">
-                        <Truck className="w-3.5 h-3.5" /> Flete y Montaje
-                      </p>
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        {cityData.name} {cityData.distance > 0 ? `(${cityData.distance} km x ${formatCurrency(5500 * ipcMultiplier)})` : ''}
+                      <p className="text-xs text-gray-400 flex items-center gap-1">
+                        <Truck className="w-3 h-3" /> Flete
                       </p>
                     </div>
-                    <p className="text-sm font-medium">{formatCurrency(freightPrice)}</p>
+                    <p className="text-xs font-medium">{formatCurrency(freightPrice)}</p>
                   </div>
 
                   {extrasTotal > 0 && (
-                    <div className="flex justify-between items-start pt-4 border-t border-gray-800">
+                    <div className="flex justify-between items-start pt-2 border-t border-gray-800">
                       <div>
-                        <p className="text-sm text-gray-400">Adicionales</p>
-                        <p className="text-xs text-gray-500 mt-0.5">
-                          {Object.values(extrasQty).filter((v: number) => v > 0).reduce((a: number, b: number) => a + b, 0)} items
-                        </p>
+                        <p className="text-xs text-gray-400">Adicionales</p>
                       </div>
-                      <p className="text-sm font-medium">{formatCurrency(extrasTotal)}</p>
+                      <p className="text-xs font-medium">{formatCurrency(extrasTotal)}</p>
                     </div>
                   )}
                 </div>
 
                 {/* Total */}
-                <div className="pt-6 border-t border-gray-800">
-                  <p className="text-sm text-gray-400 mb-1">Costo Total Estimado</p>
-                  <p className="text-4xl font-bold tracking-tight text-white">
+                <div className="pt-3 border-t border-gray-800">
+                  <p className="text-[10px] text-gray-400 mb-0.5">Total Estimado</p>
+                  <p className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
                     {formatCurrency(grandTotal)}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-2">
-                    * Los valores no incluyen IVA. Precios sujetos a modificación.
                   </p>
                 </div>
 
@@ -517,25 +421,51 @@ export default function App() {
                 <button 
                   onClick={handleSaveQuote}
                   disabled={isSaving}
-                  className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors focus:ring-4 focus:ring-blue-500/20 outline-none flex items-center justify-center gap-2 disabled:opacity-70"
+                  className="w-full py-2 px-3 bg-blue-600 hover:bg-blue-500 text-white rounded-md text-xs font-medium transition-colors focus:ring-2 focus:ring-blue-500/20 outline-none flex items-center justify-center gap-1.5 disabled:opacity-70 mt-2"
                 >
-                  <Save className="w-4 h-4" />
-                  {isSaving ? 'Guardando...' : 'Guardar Presupuesto'}
+                  <Save className="w-3.5 h-3.5" />
+                  {isSaving ? 'Guardando...' : 'Guardar'}
                 </button>
-                {user && (
-                  <button 
-                    onClick={loadSavedQuotes}
-                    className="w-full py-2.5 px-4 bg-gray-800 hover:bg-gray-700 text-white rounded-lg text-sm font-medium transition-colors focus:ring-4 focus:ring-gray-700/20 outline-none flex items-center justify-center gap-2 mt-2"
-                  >
-                    <List className="w-4 h-4" />
-                    Ver Presupuestos
-                  </button>
-                )}
               </div>
             </div>
           </div>
 
         </div>
+
+        {/* Bottom Container: Saved Quotes */}
+        <section className="mt-2 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex flex-col">
+          <div className="px-3 py-2 border-b border-gray-100 bg-gray-50/50 flex items-center gap-1.5">
+            <List className="w-3.5 h-3.5 text-blue-600" />
+            <h2 className="text-xs sm:text-sm font-semibold text-gray-900">
+              Presupuestos Guardados
+            </h2>
+          </div>
+          <div className="overflow-y-auto max-h-48 sm:max-h-64 p-0">
+            {savedQuotes.length === 0 ? (
+              <div className="p-4 text-center text-[10px] sm:text-xs text-gray-500">No hay presupuestos guardados.</div>
+            ) : (
+              <ul className="divide-y divide-gray-100">
+                {savedQuotes.map(quote => (
+                  <li key={quote.id} className="p-2 sm:p-3 hover:bg-gray-50 transition-colors flex justify-between items-center gap-2">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-xs font-semibold text-gray-900 truncate">{quote.cliente} - {quote.evento}</h3>
+                      <p className="text-[10px] text-gray-500 truncate mt-0.5">
+                        {quote.selectedCity} • {quote.selectedSize}m² • IPC {quote.ipcMonth}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="font-bold text-xs text-gray-900">{formatCurrency(quote.grandTotal)}</p>
+                      <p className="text-[9px] text-gray-400 mt-0.5">
+                        {quote.createdAt?.toDate ? quote.createdAt.toDate().toLocaleDateString('es-AR') : ''}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+
       </main>
     </div>
   );

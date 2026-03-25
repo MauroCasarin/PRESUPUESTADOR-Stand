@@ -10,7 +10,6 @@ service cloud.firestore {
     // Collection: quotes
     // Document ID: [auto-generated]
     // Fields:
-    //   - userId: string (required) - The UID of the user who created the quote.
     //   - cliente: string (required) - Name of the client.
     //   - evento: string (required) - Name of the event.
     //   - selectedCity: string (required) - Selected city for the stand.
@@ -29,26 +28,6 @@ service cloud.firestore {
     // ===============================================================
     // Helper Functions
     // ===============================================================
-    
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-    
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
-    
-    function isDocOwner() {
-      return isAuthenticated() && request.auth.uid == resource.data.userId;
-    }
-    
-    function uidUnchanged() {
-      return !('userId' in request.resource.data) || request.resource.data.userId == request.auth.uid;
-    }
-    
-    function uidNotModified() {
-      return !('userId' in request.resource.data) || request.resource.data.userId == resource.data.userId;
-    }
     
     function hasRequiredFields(fields) {
       return request.resource.data.keys().hasAll(fields);
@@ -77,9 +56,8 @@ service cloud.firestore {
     // ===============================================================
     
     function isValidQuote() {
-      return hasRequiredFields(['userId', 'cliente', 'evento', 'selectedCity', 'selectedSize', 'extrasQty', 'ipcMonth', 'ipcValue', 'basePrice', 'freightPrice', 'extrasTotal', 'grandTotal', 'createdAt']) &&
-             hasOnlyAllowedFields(['userId', 'cliente', 'evento', 'selectedCity', 'selectedSize', 'extrasQty', 'ipcMonth', 'ipcValue', 'basePrice', 'freightPrice', 'extrasTotal', 'grandTotal', 'createdAt']) &&
-             validStringLength('userId', 1, 100) &&
+      return hasRequiredFields(['cliente', 'evento', 'selectedCity', 'selectedSize', 'extrasQty', 'ipcMonth', 'ipcValue', 'basePrice', 'freightPrice', 'extrasTotal', 'grandTotal', 'createdAt']) &&
+             hasOnlyAllowedFields(['cliente', 'evento', 'selectedCity', 'selectedSize', 'extrasQty', 'ipcMonth', 'ipcValue', 'basePrice', 'freightPrice', 'extrasTotal', 'grandTotal', 'createdAt']) &&
              validStringLength('cliente', 1, 200) &&
              validStringLength('evento', 1, 200) &&
              validStringLength('selectedCity', 1, 100) &&
@@ -99,22 +77,11 @@ service cloud.firestore {
     // ===============================================================
     
     match /quotes/{quoteId} {
-      // Only the owner can read their quotes
-      allow read: if isDocOwner();
-      
-      // Only authenticated users can create quotes, and they must be the owner
-      allow create: if isAuthenticated() && 
-                    isValidQuote() && 
-                    uidUnchanged();
-                    
-      // Only the owner can update their quotes, and they cannot change the owner or createdAt
-      allow update: if isDocOwner() && 
-                    isValidQuote() && 
-                    uidNotModified() &&
-                    areImmutableFieldsUnchanged(['createdAt']);
-                    
-      // Only the owner can delete their quotes
-      allow delete: if isDocOwner();
+      // Allow public read and write as requested
+      allow read: if true;
+      allow create: if isValidQuote();
+      allow update: if isValidQuote() && areImmutableFieldsUnchanged(['createdAt']);
+      allow delete: if true;
     }
   }
 }
