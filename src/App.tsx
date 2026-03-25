@@ -1,4 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import DatePicker, { registerLocale } from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
+import { es } from 'date-fns/locale';
 import { 
   Calculator, 
   MapPin, 
@@ -20,6 +23,8 @@ import {
 } from 'lucide-react';
 import { db } from './firebase';
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp } from 'firebase/firestore';
+
+registerLocale('es', es);
 
 // --- DATA EXTRACTED FROM EXCEL ---
 const BASE_PRICES = {
@@ -82,8 +87,11 @@ const formatCurrency = (amount: number) => {
 export default function App() {
   const [cliente, setCliente] = useState<string>('');
   const [evento, setEvento] = useState<string>('');
-  const [fechaInicio, setFechaInicio] = useState<string>('');
-  const [fechaFin, setFechaFin] = useState<string>('');
+  const [startDate, setStartDate] = useState<Date | null>(null);
+  const [endDate, setEndDate] = useState<Date | null>(null);
+  const [customExtras, setCustomExtras] = useState<{ id: string, name: string, price: number }[]>([]);
+  const [newCustomExtraName, setNewCustomExtraName] = useState('');
+  const [newCustomExtraPrice, setNewCustomExtraPrice] = useState('');
   const [selectedCity, setSelectedCity] = useState<string>(CITIES[0].name);
   const [selectedSize, setSelectedSize] = useState<string>("4");
   const [extrasQty, setExtrasQty] = useState<Record<string, number>>({});
@@ -94,6 +102,7 @@ export default function App() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [expandedClient, setExpandedClient] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
   const [sueValue, setSueValue] = useState<number>(1800000);
   const [showSueModal, setShowSueModal] = useState(false);
   const [suePassword, setSuePassword] = useState('');
@@ -170,11 +179,23 @@ export default function App() {
   };
 
   const handleExtraInputChange = (id: string, value: string) => {
-    const num = parseInt(value, 10);
+    const num = parseFloat(value);
     setExtrasQty(prev => ({
       ...prev,
       [id]: isNaN(num) ? 0 : Math.max(0, num)
     }));
+  };
+
+  const handleAddCustomExtra = () => {
+    if (newCustomExtraName && newCustomExtraPrice) {
+      setCustomExtras(prev => [...prev, { 
+        id: `custom-${Date.now()}`, 
+        name: newCustomExtraName, 
+        price: parseFloat(newCustomExtraPrice) 
+      }]);
+      setNewCustomExtraName('');
+      setNewCustomExtraPrice('');
+    }
   };
 
   // --- CALCULATIONS ---
@@ -183,19 +204,17 @@ export default function App() {
   const cityData = useMemo(() => CITIES.find(c => c.name === selectedCity) || CITIES[0], [selectedCity]);
   
   const basePrice = (BASE_PRICES[selectedSize as keyof typeof BASE_PRICES] || 0) * ipcMultiplier;
-  const freightPrice = (cityData.distance * 5500) * ipcMultiplier;
+  const freightPrice = (cityData.name === "Cap.Fed" ? 0 : cityData.distance * 5500) * ipcMultiplier;
   
   const eventDays = useMemo(() => {
-    if (!fechaInicio || !fechaFin) return 1;
-    const start = new Date(fechaInicio);
-    const end = new Date(fechaFin);
-    const diffTime = Math.abs(end.getTime() - start.getTime());
+    if (!startDate || !endDate) return 1;
+    const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return diffDays + 1;
-  }, [fechaInicio, fechaFin]);
+  }, [startDate, endDate]);
 
   const extrasTotal = useMemo(() => {
-    return EXTRAS.reduce((total, extra) => {
+    const standardExtras = EXTRAS.reduce((total, extra) => {
       const qty = extrasQty[extra.id] || 0;
       let extraPrice = extra.price * ipcMultiplier * qty;
       if (extra.id.startsWith('tv')) {
@@ -203,7 +222,11 @@ export default function App() {
       }
       return total + extraPrice;
     }, 0);
-  }, [extrasQty, ipcMultiplier, eventDays]);
+    
+    const customExtrasTotal = customExtras.reduce((total, extra) => total + (extra.price * ipcMultiplier), 0);
+    
+    return standardExtras + customExtrasTotal;
+  }, [extrasQty, customExtras, ipcMultiplier, eventDays]);
 
   const grandTotal = basePrice + freightPrice + extrasTotal;
 
@@ -212,17 +235,22 @@ export default function App() {
       alert("Por favor ingresa Cliente y Evento para guardar el presupuesto.");
       return;
     }
+    if (fechaInicio && fechaFin && new Date(fechaFin) < new Date(fechaInicio)) {
+      alert("La fecha de fin no puede ser anterior a la fecha de inicio.");
+      return;
+    }
     
     setIsSaving(true);
     try {
       const quoteData = {
         cliente,
         evento,
-        fechaInicio,
-        fechaFin,
+        fechaInicio: startDate ? startDate.toISOString() : '',
+        fechaFin: endDate ? endDate.toISOString() : '',
         selectedCity,
         selectedSize,
         extrasQty,
+        customExtras,
         ipcMonth: ipcData.month || capitalizedCurrentMonth,
         ipcValue: ipcData.value,
         basePrice,
@@ -246,11 +274,12 @@ export default function App() {
       // Reset form
       setCliente('');
       setEvento('');
-      setFechaInicio('');
-      setFechaFin('');
+      setStartDate(null);
+      setEndDate(null);
       setSelectedCity(CITIES[0].name);
       setSelectedSize("4");
       setExtrasQty({});
+      setCustomExtras([]);
     } catch (error) {
       console.error("Error saving quote", error);
       alert("Hubo un error al guardar el presupuesto.");
@@ -263,11 +292,12 @@ export default function App() {
     setEditingId(quote.id);
     setCliente(quote.cliente || '');
     setEvento(quote.evento || '');
-    setFechaInicio(quote.fechaInicio || '');
-    setFechaFin(quote.fechaFin || '');
+    setStartDate(quote.fechaInicio ? new Date(quote.fechaInicio) : null);
+    setEndDate(quote.fechaFin ? new Date(quote.fechaFin) : null);
     setSelectedCity(quote.selectedCity || CITIES[0].name);
     setSelectedSize(quote.selectedSize || "4");
     setExtrasQty(quote.extrasQty || {});
+    setCustomExtras(quote.customExtras || []);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -294,13 +324,18 @@ export default function App() {
 
   const groupedQuotes = useMemo(() => {
     const groups: Record<string, any[]> = {};
-    savedQuotes.forEach(q => {
-      const c = q.cliente || 'Sin Cliente';
-      if (!groups[c]) groups[c] = [];
-      groups[c].push(q);
-    });
+    savedQuotes
+      .filter(q => 
+        (q.cliente || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (q.evento || '').toLowerCase().includes(searchTerm.toLowerCase())
+      )
+      .forEach(q => {
+        const c = q.cliente || 'Sin Cliente';
+        if (!groups[c]) groups[c] = [];
+        groups[c].push(q);
+      });
     return groups;
-  }, [savedQuotes]);
+  }, [savedQuotes, searchTerm]);
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 font-sans selection:bg-blue-200 flex flex-col">
@@ -359,27 +394,34 @@ export default function App() {
                   />
                 </div>
                 <div className="space-y-1 sm:col-span-2">
-                  <label className="block text-[10px] sm:text-xs font-medium text-gray-700">Fechas del Evento</label>
-                  <div className="flex gap-2">
-                    <div className="flex-1 flex items-center gap-1.5">
-                      <span className="text-[10px] text-gray-500">Desde</span>
-                      <input
-                        type="date"
-                        value={fechaInicio}
-                        onChange={(e) => setFechaInicio(e.target.value)}
-                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-50 py-1.5 px-2 text-xs border"
-                      />
-                    </div>
-                    <div className="flex-1 flex items-center gap-1.5">
-                      <span className="text-[10px] text-gray-500">Hasta</span>
-                      <input
-                        type="date"
-                        value={fechaFin}
-                        onChange={(e) => setFechaFin(e.target.value)}
-                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-50 py-1.5 px-2 text-xs border"
-                      />
-                    </div>
-                  </div>
+                  <label className="block text-[10px] sm:text-xs font-medium text-gray-700">
+                    Fechas del Evento {eventDays > 1 ? `(${eventDays} días)` : '(1 día)'}
+                  </label>
+                  <DatePicker
+                    selectsRange={true}
+                    startDate={startDate}
+                    endDate={endDate}
+                    onChange={(update) => {
+                      setStartDate(update[0]);
+                      setEndDate(update[1]);
+                    }}
+                    locale="es"
+                    dateFormat="dd/MM/yyyy"
+                    placeholderText="Seleccionar rango de fechas"
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-50 py-1.5 px-2 text-xs border"
+                    popperClassName="centered-popper"
+                    popperPlacement="bottom"
+                    popperModifiers={[
+                      {
+                        name: 'offset',
+                        options: { offset: [0, 10] },
+                      },
+                      {
+                        name: 'preventOverflow',
+                        options: { boundary: 'viewport', padding: 20 },
+                      },
+                    ]}
+                  />
                 </div>
               </div>
             </section>
@@ -474,10 +516,11 @@ export default function App() {
                           <input 
                             type="number" 
                             min="0"
+                            step="0.1"
                             value={qty || ''}
                             onChange={(e) => handleExtraInputChange(extra.id, e.target.value)}
                             placeholder="0"
-                            className="w-6 sm:w-8 text-center bg-transparent border-none focus:ring-0 text-xs font-medium p-0"
+                            className="w-12 sm:w-16 text-center bg-transparent border-none focus:ring-0 text-xs font-medium p-0"
                           />
                           <button 
                             onClick={() => handleExtraChange(extra.id, 1)}
@@ -495,6 +538,37 @@ export default function App() {
                     </div>
                   );
                 })}
+                {customExtras.map(extra => (
+                  <div key={extra.id} className="p-2 flex justify-between items-center text-xs border-t border-gray-100">
+                    <span>{extra.name}</span>
+                    <div className="flex items-center gap-2">
+                      <span>{formatCurrency(extra.price * ipcMultiplier)}</span>
+                      <button onClick={() => setCustomExtras(prev => prev.filter(e => e.id !== extra.id))} className="text-red-500 hover:text-red-700">
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <div className="p-2 border-t border-gray-100 bg-gray-50 flex gap-2">
+                  <input 
+                    type="text"
+                    value={newCustomExtraName}
+                    onChange={(e) => setNewCustomExtraName(e.target.value)}
+                    placeholder="Adicional Vario"
+                    className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-white py-1.5 px-2 text-xs border"
+                  />
+                  <input 
+                    type="number"
+                    step="0.1"
+                    value={newCustomExtraPrice}
+                    onChange={(e) => setNewCustomExtraPrice(e.target.value)}
+                    placeholder="Precio"
+                    className="w-20 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-white py-1.5 px-2 text-xs border"
+                  />
+                  <button onClick={handleAddCustomExtra} className="bg-blue-600 text-white rounded-md px-2 py-1.5 text-xs font-medium hover:bg-blue-700">
+                    <Plus className="w-3 h-3" />
+                  </button>
+                </div>
               </div>
             </section>
 
@@ -520,14 +594,16 @@ export default function App() {
                     <p className="text-xs font-medium">{formatCurrency(basePrice)}</p>
                   </div>
 
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="text-xs text-gray-400 flex items-center gap-1">
-                        <Truck className="w-3 h-3" /> Flete
-                      </p>
+                  {selectedCity !== "Cap.Fed" && (
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="text-xs text-gray-400 flex items-center gap-1">
+                          <Truck className="w-3 h-3" /> Flete
+                        </p>
+                      </div>
+                      <p className="text-xs font-medium">{formatCurrency(freightPrice)}</p>
                     </div>
-                    <p className="text-xs font-medium">{formatCurrency(freightPrice)}</p>
-                  </div>
+                  )}
 
                   {extrasTotal > 0 && (
                     <div className="flex justify-between items-start pt-2 border-t border-gray-800">
@@ -575,11 +651,20 @@ export default function App() {
 
         {/* Bottom Container: Saved Quotes */}
         <section className="mt-2 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex flex-col">
-          <div className="px-3 py-2 border-b border-gray-100 bg-gray-50/50 flex items-center gap-1.5">
-            <List className="w-3.5 h-3.5 text-blue-600" />
-            <h2 className="text-xs sm:text-sm font-semibold text-gray-900">
-              Presupuestos Guardados por Cliente
-            </h2>
+          <div className="px-3 py-2 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between gap-1.5">
+            <div className="flex items-center gap-1.5">
+              <List className="w-3.5 h-3.5 text-blue-600" />
+              <h2 className="text-xs sm:text-sm font-semibold text-gray-900">
+                Presupuestos Guardados por Cliente
+              </h2>
+            </div>
+            <input
+              type="text"
+              placeholder="Buscar..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-white py-1 px-2 text-xs border w-32 sm:w-48"
+            />
           </div>
           <div className="overflow-y-auto max-h-48 sm:max-h-64 p-0">
             {Object.keys(groupedQuotes).length === 0 ? (
