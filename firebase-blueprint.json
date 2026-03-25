@@ -1,0 +1,72 @@
+{
+  "entities": {
+    "Quote": {
+      "title": "Quote",
+      "description": "A saved quote/presupuesto for a stand.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "The UID of the user who created the quote."
+        },
+        "cliente": {
+          "type": "string",
+          "description": "Name of the client."
+        },
+        "evento": {
+          "type": "string",
+          "description": "Name of the event."
+        },
+        "selectedCity": {
+          "type": "string",
+          "description": "Selected city for the stand."
+        },
+        "selectedSize": {
+          "type": "string",
+          "description": "Selected size of the stand in m2."
+        },
+        "extrasQty": {
+          "type": "object",
+          "description": "Map of extra item IDs to their quantities."
+        },
+        "ipcMonth": {
+          "type": "string",
+          "description": "Month of the IPC used."
+        },
+        "ipcValue": {
+          "type": "number",
+          "description": "Value of the IPC used."
+        },
+        "basePrice": {
+          "type": "number",
+          "description": "Calculated base price."
+        },
+        "freightPrice": {
+          "type": "number",
+          "description": "Calculated freight price."
+        },
+        "extrasTotal": {
+          "type": "number",
+          "description": "Calculated extras total."
+        },
+        "grandTotal": {
+          "type": "number",
+          "description": "Calculated grand total."
+        },
+        "createdAt": {
+          "type": "timestamp",
+          "description": "When the quote was created."
+        }
+      },
+      "required": ["userId", "cliente", "evento", "selectedCity", "selectedSize", "extrasQty", "ipcMonth", "ipcValue", "basePrice", "freightPrice", "extrasTotal", "grandTotal", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/quotes/{quoteId}": {
+      "schema": {
+        "$ref": "#/entities/Quote"
+      },
+      "description": "Stores all the quotes created by users."
+    }
+  }
+}

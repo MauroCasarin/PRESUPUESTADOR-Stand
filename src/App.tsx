@@ -10,8 +10,15 @@ import {
   Plus,
   Minus,
   Receipt,
-  TrendingUp
+  TrendingUp,
+  Save,
+  List,
+  LogOut,
+  LogIn
 } from 'lucide-react';
+import { auth, db, loginWithGoogle, logout } from './firebase';
+import { onAuthStateChanged, User } from 'firebase/auth';
+import { collection, addDoc, getDocs, query, where, orderBy, serverTimestamp } from 'firebase/firestore';
 
 // --- DATA EXTRACTED FROM EXCEL ---
 const BASE_PRICES = {
@@ -74,6 +81,12 @@ const formatCurrency = (amount: number) => {
 };
 
 export default function App() {
+  const [user, setUser] = useState<User | null>(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [showSaved, setShowSaved] = useState(false);
+  const [savedQuotes, setSavedQuotes] = useState<any[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+
   const [cliente, setCliente] = useState<string>('');
   const [evento, setEvento] = useState<string>('');
   const [selectedCity, setSelectedCity] = useState<string>(CITIES[0].name);
@@ -83,6 +96,14 @@ export default function App() {
 
   const currentMonthName = new Date().toLocaleString('es-AR', { month: 'long' });
   const capitalizedCurrentMonth = currentMonthName.charAt(0).toUpperCase() + currentMonthName.slice(1);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setIsAuthReady(true);
+    });
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     fetch('https://api.argentinadatos.com/v1/finanzas/indices/inflacion')
@@ -137,6 +158,103 @@ export default function App() {
 
   const grandTotal = basePrice + freightPrice + extrasTotal;
 
+  const handleSaveQuote = async () => {
+    if (!user) {
+      await loginWithGoogle();
+      return;
+    }
+    if (!cliente || !evento) {
+      alert("Por favor ingresa Cliente y Evento para guardar el presupuesto.");
+      return;
+    }
+    
+    setIsSaving(true);
+    try {
+      await addDoc(collection(db, 'quotes'), {
+        userId: user.uid,
+        cliente,
+        evento,
+        selectedCity,
+        selectedSize,
+        extrasQty,
+        ipcMonth: ipcData.month || capitalizedCurrentMonth,
+        ipcValue: ipcData.value,
+        basePrice,
+        freightPrice,
+        extrasTotal,
+        grandTotal,
+        createdAt: serverTimestamp()
+      });
+      alert("Presupuesto guardado exitosamente.");
+    } catch (error) {
+      console.error("Error saving quote", error);
+      alert("Hubo un error al guardar el presupuesto.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const loadSavedQuotes = async () => {
+    if (!user) return;
+    try {
+      const q = query(
+        collection(db, 'quotes'),
+        where('userId', '==', user.uid),
+        orderBy('createdAt', 'desc')
+      );
+      const snapshot = await getDocs(q);
+      const quotes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setSavedQuotes(quotes);
+      setShowSaved(true);
+    } catch (error) {
+      console.error("Error loading quotes", error);
+    }
+  };
+
+  if (showSaved) {
+    return (
+      <div className="min-h-screen bg-gray-50 text-gray-900 font-sans p-4 sm:p-8">
+        <div className="max-w-4xl mx-auto">
+          <div className="flex justify-between items-center mb-6">
+            <h1 className="text-2xl font-bold">Presupuestos Guardados</h1>
+            <button 
+              onClick={() => setShowSaved(false)}
+              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-sm font-medium transition-colors"
+            >
+              Volver al Cotizador
+            </button>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            {savedQuotes.length === 0 ? (
+              <div className="p-8 text-center text-gray-500">No hay presupuestos guardados.</div>
+            ) : (
+              <ul className="divide-y divide-gray-100">
+                {savedQuotes.map(quote => (
+                  <li key={quote.id} className="p-4 hover:bg-gray-50 transition-colors">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <h3 className="font-semibold text-gray-900">{quote.cliente} - {quote.evento}</h3>
+                        <p className="text-sm text-gray-500 mt-1">
+                          {quote.selectedCity} • {quote.selectedSize}m² • IPC {quote.ipcMonth} ({quote.ipcValue}%)
+                        </p>
+                        <p className="text-xs text-gray-400 mt-1">
+                          {quote.createdAt?.toDate ? quote.createdAt.toDate().toLocaleString('es-AR') : ''}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-lg text-gray-900">{formatCurrency(quote.grandTotal)}</p>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 font-sans selection:bg-blue-200">
       {/* Header */}
@@ -150,14 +268,40 @@ export default function App() {
           </div>
           <div className="flex items-center gap-3">
             {!ipcData.loading && ipcData.month && (
-              <div className="flex items-center gap-1.5 text-xs font-medium text-blue-700 bg-blue-50 px-3 py-1 rounded-full border border-blue-200 shadow-sm">
+              <div className="flex items-center gap-1.5 text-xs font-medium text-blue-700 bg-blue-50 px-3 py-1 rounded-full border border-blue-200 shadow-sm hidden sm:flex">
                 <TrendingUp className="w-3.5 h-3.5" />
                 <span>IPC {ipcData.month}: {ipcData.value}%</span>
               </div>
             )}
-            <div className="text-sm font-medium text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
+            <div className="text-sm font-medium text-gray-500 bg-gray-100 px-3 py-1 rounded-full hidden sm:block">
               Tarifas {capitalizedCurrentMonth} 2026
             </div>
+            {isAuthReady && user ? (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={loadSavedQuotes}
+                  className="flex items-center gap-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  <List className="w-4 h-4" />
+                  <span className="hidden sm:inline">Ver Guardados</span>
+                </button>
+                <button
+                  onClick={logout}
+                  className="p-1.5 text-gray-500 hover:text-gray-700 transition-colors"
+                  title="Cerrar sesión"
+                >
+                  <LogOut className="w-5 h-5" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={loginWithGoogle}
+                className="flex items-center gap-1.5 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-lg hover:bg-blue-100 transition-colors"
+              >
+                <LogIn className="w-4 h-4" />
+                <span>Ingresar</span>
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -371,11 +515,22 @@ export default function App() {
 
                 {/* Action */}
                 <button 
-                  onClick={() => console.log("Ver Presupuesto")}
-                  className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors focus:ring-4 focus:ring-blue-500/20 outline-none"
+                  onClick={handleSaveQuote}
+                  disabled={isSaving}
+                  className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm font-medium transition-colors focus:ring-4 focus:ring-blue-500/20 outline-none flex items-center justify-center gap-2 disabled:opacity-70"
                 >
-                  Ver Presupuesto
+                  <Save className="w-4 h-4" />
+                  {isSaving ? 'Guardando...' : 'Guardar Presupuesto'}
                 </button>
+                {user && (
+                  <button 
+                    onClick={loadSavedQuotes}
+                    className="w-full py-2.5 px-4 bg-gray-800 hover:bg-gray-700 text-white rounded-lg text-sm font-medium transition-colors focus:ring-4 focus:ring-gray-700/20 outline-none flex items-center justify-center gap-2 mt-2"
+                  >
+                    <List className="w-4 h-4" />
+                    Ver Presupuestos
+                  </button>
+                )}
               </div>
             </div>
           </div>
