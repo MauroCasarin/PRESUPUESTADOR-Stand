@@ -11,10 +11,15 @@ import {
   Receipt,
   TrendingUp,
   Save,
-  List
+  List,
+  Edit2,
+  Trash2,
+  ChevronDown,
+  ChevronRight,
+  X
 } from 'lucide-react';
 import { db } from './firebase';
-import { collection, addDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 
 // --- DATA EXTRACTED FROM EXCEL ---
 const BASE_PRICES = {
@@ -62,9 +67,7 @@ const EXTRAS: ExtraItem[] = [
   { id: 'alfombra', name: 'Alfombra', price: 25300, unit: 'm²', icon: Layers },
   { id: 'tv42', name: 'TV 42"', price: 126000, unit: 'días', icon: MonitorPlay },
   { id: 'tv50', name: 'TV 50"', price: 182000, unit: 'días', icon: MonitorPlay },
-  { id: 'tv70', name: 'TV 70"', price: 242000, unit: 'días', icon: MonitorPlay },
-  { id: 'bannerDoble', name: 'Banner Doble tensor (90x190)', price: 110000, unit: 'unidades', icon: ImageIcon },
-  { id: 'bannerRollup', name: 'Banner Roll UP (85x200)', price: 120000, unit: 'unidades', icon: ImageIcon }
+  { id: 'tv70', name: 'TV 70"', price: 242000, unit: 'días', icon: MonitorPlay }
 ];
 
 // --- UTILS ---
@@ -79,6 +82,8 @@ const formatCurrency = (amount: number) => {
 export default function App() {
   const [cliente, setCliente] = useState<string>('');
   const [evento, setEvento] = useState<string>('');
+  const [fechaInicio, setFechaInicio] = useState<string>('');
+  const [fechaFin, setFechaFin] = useState<string>('');
   const [selectedCity, setSelectedCity] = useState<string>(CITIES[0].name);
   const [selectedSize, setSelectedSize] = useState<string>("4");
   const [extrasQty, setExtrasQty] = useState<Record<string, number>>({});
@@ -86,6 +91,13 @@ export default function App() {
   
   const [savedQuotes, setSavedQuotes] = useState<any[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [expandedClient, setExpandedClient] = useState<string | null>(null);
+  const [sueValue, setSueValue] = useState<number>(1800000);
+  const [showSueModal, setShowSueModal] = useState(false);
+  const [suePassword, setSuePassword] = useState('');
+  const [isSueUnlocked, setIsSueUnlocked] = useState(false);
 
   const currentMonthName = new Date().toLocaleString('es-AR', { month: 'long' });
   const capitalizedCurrentMonth = currentMonthName.charAt(0).toUpperCase() + currentMonthName.slice(1);
@@ -100,6 +112,23 @@ export default function App() {
           const monthName = date.toLocaleString('es-AR', { month: 'long', timeZone: 'UTC' });
           const capitalizedMonth = monthName.charAt(0).toUpperCase() + monthName.slice(1);
           setIpcData({ month: capitalizedMonth, value: latest.valor, loading: false });
+          
+          // Calculate accumulated inflation since last August
+          let lastAugustIndex = -1;
+          for (let i = data.length - 1; i >= 0; i--) {
+            if (data[i].fecha.includes('-08-')) {
+              lastAugustIndex = i;
+              break;
+            }
+          }
+          
+          let accumulated = 1;
+          if (lastAugustIndex !== -1) {
+            for (let i = lastAugustIndex + 1; i < data.length; i++) {
+              accumulated *= (1 + data[i].valor / 100);
+            }
+          }
+          setSueValue(1800000 * accumulated);
         } else {
           setIpcData(prev => ({ ...prev, loading: false }));
         }
@@ -172,9 +201,11 @@ export default function App() {
     
     setIsSaving(true);
     try {
-      await addDoc(collection(db, 'quotes'), {
+      const quoteData = {
         cliente,
         evento,
+        fechaInicio,
+        fechaFin,
         selectedCity,
         selectedSize,
         extrasQty,
@@ -184,9 +215,28 @@ export default function App() {
         freightPrice,
         extrasTotal,
         grandTotal,
-        createdAt: serverTimestamp()
-      });
-      alert("Presupuesto guardado exitosamente.");
+      };
+
+      if (editingId) {
+        await updateDoc(doc(db, 'quotes', editingId), quoteData);
+        alert("Presupuesto actualizado exitosamente.");
+        setEditingId(null);
+      } else {
+        await addDoc(collection(db, 'quotes'), {
+          ...quoteData,
+          createdAt: serverTimestamp()
+        });
+        alert("Presupuesto guardado exitosamente.");
+      }
+      
+      // Reset form
+      setCliente('');
+      setEvento('');
+      setFechaInicio('');
+      setFechaFin('');
+      setSelectedCity(CITIES[0].name);
+      setSelectedSize("4");
+      setExtrasQty({});
     } catch (error) {
       console.error("Error saving quote", error);
       alert("Hubo un error al guardar el presupuesto.");
@@ -194,6 +244,49 @@ export default function App() {
       setIsSaving(false);
     }
   };
+
+  const handleEdit = (quote: any) => {
+    setEditingId(quote.id);
+    setCliente(quote.cliente || '');
+    setEvento(quote.evento || '');
+    setFechaInicio(quote.fechaInicio || '');
+    setFechaFin(quote.fechaFin || '');
+    setSelectedCity(quote.selectedCity || CITIES[0].name);
+    setSelectedSize(quote.selectedSize || "4");
+    setExtrasQty(quote.extrasQty || {});
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteConfirmId) return;
+    try {
+      await deleteDoc(doc(db, 'quotes', deleteConfirmId));
+      setDeleteConfirmId(null);
+    } catch (error) {
+      console.error("Error deleting quote", error);
+    }
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setCliente('');
+    setEvento('');
+    setFechaInicio('');
+    setFechaFin('');
+    setSelectedCity(CITIES[0].name);
+    setSelectedSize("4");
+    setExtrasQty({});
+  };
+
+  const groupedQuotes = useMemo(() => {
+    const groups: Record<string, any[]> = {};
+    savedQuotes.forEach(q => {
+      const c = q.cliente || 'Sin Cliente';
+      if (!groups[c]) groups[c] = [];
+      groups[c].push(q);
+    });
+    return groups;
+  }, [savedQuotes]);
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 font-sans selection:bg-blue-200 flex flex-col">
@@ -228,7 +321,7 @@ export default function App() {
             
             {/* Datos del Presupuesto */}
             <section className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-              <div className="p-2 sm:p-3 grid grid-cols-2 gap-2">
+              <div className="p-2 sm:p-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div className="space-y-1">
                   <label htmlFor="cliente" className="block text-[10px] sm:text-xs font-medium text-gray-700">Cliente</label>
                   <input
@@ -250,6 +343,29 @@ export default function App() {
                     placeholder="Evento"
                     className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-50 py-1.5 px-2 text-xs border"
                   />
+                </div>
+                <div className="space-y-1 sm:col-span-2">
+                  <label className="block text-[10px] sm:text-xs font-medium text-gray-700">Fechas del Evento</label>
+                  <div className="flex gap-2">
+                    <div className="flex-1 flex items-center gap-1.5">
+                      <span className="text-[10px] text-gray-500">Desde</span>
+                      <input
+                        type="date"
+                        value={fechaInicio}
+                        onChange={(e) => setFechaInicio(e.target.value)}
+                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-50 py-1.5 px-2 text-xs border"
+                      />
+                    </div>
+                    <div className="flex-1 flex items-center gap-1.5">
+                      <span className="text-[10px] text-gray-500">Hasta</span>
+                      <input
+                        type="date"
+                        value={fechaFin}
+                        onChange={(e) => setFechaFin(e.target.value)}
+                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-50 py-1.5 px-2 text-xs border"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
             </section>
@@ -418,14 +534,25 @@ export default function App() {
                 </div>
 
                 {/* Action */}
-                <button 
-                  onClick={handleSaveQuote}
-                  disabled={isSaving}
-                  className="w-full py-2 px-3 bg-blue-600 hover:bg-blue-500 text-white rounded-md text-xs font-medium transition-colors focus:ring-2 focus:ring-blue-500/20 outline-none flex items-center justify-center gap-1.5 disabled:opacity-70 mt-2"
-                >
-                  <Save className="w-3.5 h-3.5" />
-                  {isSaving ? 'Guardando...' : 'Guardar'}
-                </button>
+                <div className="flex flex-col gap-2 mt-2">
+                  <button 
+                    onClick={handleSaveQuote}
+                    disabled={isSaving}
+                    className="w-full py-2 px-3 bg-blue-600 hover:bg-blue-500 text-white rounded-md text-xs font-medium transition-colors focus:ring-2 focus:ring-blue-500/20 outline-none flex items-center justify-center gap-1.5 disabled:opacity-70"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    {isSaving ? 'Guardando...' : (editingId ? 'Actualizar Presupuesto' : 'Guardar Presupuesto')}
+                  </button>
+                  {editingId && (
+                    <button 
+                      onClick={cancelEdit}
+                      className="w-full py-2 px-3 bg-gray-700 hover:bg-gray-600 text-white rounded-md text-xs font-medium transition-colors focus:ring-2 focus:ring-gray-500/20 outline-none flex items-center justify-center gap-1.5"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      Cancelar Edición
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -437,36 +564,166 @@ export default function App() {
           <div className="px-3 py-2 border-b border-gray-100 bg-gray-50/50 flex items-center gap-1.5">
             <List className="w-3.5 h-3.5 text-blue-600" />
             <h2 className="text-xs sm:text-sm font-semibold text-gray-900">
-              Presupuestos Guardados
+              Presupuestos Guardados por Cliente
             </h2>
           </div>
           <div className="overflow-y-auto max-h-48 sm:max-h-64 p-0">
-            {savedQuotes.length === 0 ? (
+            {Object.keys(groupedQuotes).length === 0 ? (
               <div className="p-4 text-center text-[10px] sm:text-xs text-gray-500">No hay presupuestos guardados.</div>
             ) : (
-              <ul className="divide-y divide-gray-100">
-                {savedQuotes.map(quote => (
-                  <li key={quote.id} className="p-2 sm:p-3 hover:bg-gray-50 transition-colors flex justify-between items-center gap-2">
-                    <div className="min-w-0 flex-1">
-                      <h3 className="text-xs font-semibold text-gray-900 truncate">{quote.cliente} - {quote.evento}</h3>
-                      <p className="text-[10px] text-gray-500 truncate mt-0.5">
-                        {quote.selectedCity} • {quote.selectedSize}m² • IPC {quote.ipcMonth}
-                      </p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="font-bold text-xs text-gray-900">{formatCurrency(quote.grandTotal)}</p>
-                      <p className="text-[9px] text-gray-400 mt-0.5">
-                        {quote.createdAt?.toDate ? quote.createdAt.toDate().toLocaleDateString('es-AR') : ''}
-                      </p>
-                    </div>
-                  </li>
+              <div className="divide-y divide-gray-100">
+                {Object.entries(groupedQuotes).map(([clientName, quotes]) => (
+                  <div key={clientName} className="flex flex-col">
+                    <button 
+                      onClick={() => setExpandedClient(expandedClient === clientName ? null : clientName)}
+                      className="flex items-center justify-between p-2 sm:p-3 hover:bg-gray-50 transition-colors text-left w-full"
+                    >
+                      <span className="text-xs font-semibold text-gray-900">{clientName}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{(quotes as any[]).length}</span>
+                        {expandedClient === clientName ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
+                      </div>
+                    </button>
+                    
+                    {expandedClient === clientName && (
+                      <ul className="bg-gray-50/50 divide-y divide-gray-100 border-t border-gray-100">
+                        {(quotes as any[]).map(quote => (
+                          <li key={quote.id} className="p-2 sm:p-3 pl-4 sm:pl-6 flex flex-col gap-2 hover:bg-gray-100/50 transition-colors">
+                            <div className="flex justify-between items-start gap-2">
+                              <div className="min-w-0 flex-1">
+                                <h3 className="text-[11px] sm:text-xs font-medium text-gray-900 truncate">{quote.evento}</h3>
+                                <p className="text-[9px] sm:text-[10px] text-gray-500 truncate mt-0.5">
+                                  {quote.selectedCity} • {quote.selectedSize}m²
+                                </p>
+                                {(quote.fechaInicio || quote.fechaFin) && (
+                                  <p className="text-[9px] sm:text-[10px] text-gray-500 truncate mt-0.5">
+                                    {quote.fechaInicio ? new Date(quote.fechaInicio).toLocaleDateString('es-AR') : '?'} al {quote.fechaFin ? new Date(quote.fechaFin).toLocaleDateString('es-AR') : '?'}
+                                  </p>
+                                )}
+                              </div>
+                              <div className="text-right shrink-0">
+                                <p className="font-bold text-xs text-gray-900">{formatCurrency(quote.grandTotal)}</p>
+                                <p className="text-[9px] text-gray-400 mt-0.5">
+                                  {quote.createdAt?.toDate ? quote.createdAt.toDate().toLocaleDateString('es-AR') : ''}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex justify-end gap-2 mt-1">
+                              <button 
+                                onClick={() => handleEdit(quote)}
+                                className="flex items-center gap-1 text-[10px] text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-1 rounded transition-colors"
+                              >
+                                <Edit2 className="w-3 h-3" /> Editar
+                              </button>
+                              <button 
+                                onClick={() => setDeleteConfirmId(quote.id)}
+                                className="flex items-center gap-1 text-[10px] text-red-600 hover:text-red-800 bg-red-50 px-2 py-1 rounded transition-colors"
+                              >
+                                <Trash2 className="w-3 h-3" /> Eliminar
+                              </button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
                 ))}
-              </ul>
+              </div>
             )}
           </div>
         </section>
 
+        {/* Sue Container */}
+        <div className="mt-1 flex justify-end px-1">
+          <button 
+            onClick={() => {
+              setShowSueModal(true);
+              setIsSueUnlocked(false);
+              setSuePassword('');
+            }}
+            className="text-[6px] text-gray-300 hover:text-gray-400 font-medium bg-transparent hover:bg-gray-100/30 px-1 py-0.5 rounded cursor-pointer transition-colors opacity-50 hover:opacity-100"
+          >
+            Sue: {formatCurrency(sueValue / 2)}
+          </button>
+        </div>
+
       </main>
+
+      {/* Custom Delete Confirmation Modal */}
+      {deleteConfirmId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-4 sm:p-5 overflow-hidden animate-in fade-in zoom-in duration-200">
+            <h3 className="text-lg font-bold text-gray-900 mb-2">¿Eliminar presupuesto?</h3>
+            <p className="text-sm text-gray-500 mb-5">
+              Esta acción no se puede deshacer. El presupuesto se borrará permanentemente.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button 
+                onClick={() => setDeleteConfirmId(null)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+              >
+                Cancelar
+              </button>
+              <button 
+                onClick={confirmDelete}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md transition-colors"
+              >
+                Sí, eliminar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sue Modal */}
+      {showSueModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-lg shadow-xl max-w-xs w-full p-4 sm:p-5 overflow-hidden animate-in fade-in zoom-in duration-200 relative">
+            <button 
+              onClick={() => setShowSueModal(false)}
+              className="absolute top-2 right-2 p-1.5 text-gray-400 hover:text-gray-600 rounded-full transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            
+            {!isSueUnlocked ? (
+              <div className="flex flex-col items-center pt-2">
+                <h3 className="text-sm font-bold text-gray-900 mb-3">Acceso Restringido</h3>
+                <input 
+                  type="password" 
+                  value={suePassword}
+                  onChange={(e) => {
+                    setSuePassword(e.target.value);
+                    if (e.target.value === '214') {
+                      setIsSueUnlocked(true);
+                    }
+                  }}
+                  placeholder="Contraseña"
+                  className="w-full text-center rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-50 py-2 px-3 text-sm border"
+                  autoFocus
+                />
+              </div>
+            ) : (
+              <div className="flex flex-col pt-2">
+                <h3 className="text-sm font-bold text-gray-900 mb-3 border-b border-gray-100 pb-2">Detalle de Actualización</h3>
+                <div className="space-y-3 mb-4">
+                  <div className="flex justify-between items-center bg-gray-50 p-2 rounded-md">
+                    <span className="text-xs text-gray-500 font-medium">QUINCENA</span>
+                    <span className="text-sm font-bold text-gray-900">{formatCurrency(sueValue / 2)}</span>
+                  </div>
+                  <div className="flex justify-between items-center bg-gray-50 p-2 rounded-md">
+                    <span className="text-xs text-gray-500 font-medium">MES</span>
+                    <span className="text-sm font-bold text-gray-900">{formatCurrency(sueValue)}</span>
+                  </div>
+                </div>
+                <p className="text-[10px] text-gray-400 text-center bg-gray-50 p-2 rounded border border-gray-100">
+                  Sueldo actualizado a la fecha del IPC ultimo{ipcData.month ? ` (${ipcData.month})` : ''}.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

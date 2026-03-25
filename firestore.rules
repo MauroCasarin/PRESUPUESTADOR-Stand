@@ -12,6 +12,8 @@ service cloud.firestore {
     // Fields:
     //   - cliente: string (required) - Name of the client.
     //   - evento: string (required) - Name of the event.
+    //   - fechaInicio: string (optional) - Start date of the event.
+    //   - fechaFin: string (optional) - End date of the event.
     //   - selectedCity: string (required) - Selected city for the stand.
     //   - selectedSize: string (required) - Selected size of the stand in m2.
     //   - extrasQty: map (required) - Map of extra item IDs to their quantities.
@@ -21,7 +23,7 @@ service cloud.firestore {
     //   - freightPrice: number (required) - Calculated freight price.
     //   - extrasTotal: number (required) - Calculated extras total.
     //   - grandTotal: number (required) - Calculated grand total.
-    //   - createdAt: timestamp (required) - When the quote was created.
+    //   - createdAt: timestamp (optional) - When the quote was created.
     //
     // ===============================================================
 
@@ -56,10 +58,12 @@ service cloud.firestore {
     // ===============================================================
     
     function isValidQuote() {
-      return hasRequiredFields(['cliente', 'evento', 'selectedCity', 'selectedSize', 'extrasQty', 'ipcMonth', 'ipcValue', 'basePrice', 'freightPrice', 'extrasTotal', 'grandTotal', 'createdAt']) &&
-             hasOnlyAllowedFields(['cliente', 'evento', 'selectedCity', 'selectedSize', 'extrasQty', 'ipcMonth', 'ipcValue', 'basePrice', 'freightPrice', 'extrasTotal', 'grandTotal', 'createdAt']) &&
+      return hasRequiredFields(['cliente', 'evento', 'selectedCity', 'selectedSize', 'extrasQty', 'ipcMonth', 'ipcValue', 'basePrice', 'freightPrice', 'extrasTotal', 'grandTotal']) &&
+             hasOnlyAllowedFields(['cliente', 'evento', 'fechaInicio', 'fechaFin', 'selectedCity', 'selectedSize', 'extrasQty', 'ipcMonth', 'ipcValue', 'basePrice', 'freightPrice', 'extrasTotal', 'grandTotal', 'createdAt']) &&
              validStringLength('cliente', 1, 200) &&
              validStringLength('evento', 1, 200) &&
+             (!('fechaInicio' in request.resource.data) || validStringLength('fechaInicio', 0, 20)) &&
+             (!('fechaFin' in request.resource.data) || validStringLength('fechaFin', 0, 20)) &&
              validStringLength('selectedCity', 1, 100) &&
              validStringLength('selectedSize', 1, 10) &&
              request.resource.data.extrasQty is map &&
@@ -69,7 +73,7 @@ service cloud.firestore {
              isPositive('freightPrice') &&
              isPositive('extrasTotal') &&
              isPositive('grandTotal') &&
-             request.resource.data.createdAt is timestamp;
+             (!('createdAt' in request.resource.data) || request.resource.data.createdAt is timestamp);
     }
 
     // ===============================================================

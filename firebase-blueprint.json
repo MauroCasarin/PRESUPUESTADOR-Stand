@@ -13,6 +13,14 @@
           "type": "string",
           "description": "Name of the event."
         },
+        "fechaInicio": {
+          "type": "string",
+          "description": "Start date of the event."
+        },
+        "fechaFin": {
+          "type": "string",
+          "description": "End date of the event."
+        },
         "selectedCity": {
           "type": "string",
           "description": "Selected city for the stand."
@@ -54,7 +62,7 @@
           "description": "When the quote was created."
         }
       },
-      "required": ["cliente", "evento", "selectedCity", "selectedSize", "extrasQty", "ipcMonth", "ipcValue", "basePrice", "freightPrice", "extrasTotal", "grandTotal", "createdAt"]
+      "required": ["cliente", "evento", "selectedCity", "selectedSize", "extrasQty", "ipcMonth", "ipcValue", "basePrice", "freightPrice", "extrasTotal", "grandTotal"]
     }
   },
   "firestore": {
