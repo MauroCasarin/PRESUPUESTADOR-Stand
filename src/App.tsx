@@ -90,7 +90,6 @@ export default function App() {
   const [evento, setEvento] = useState<string>('');
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
-  const [fechaImportada, setFechaImportada] = useState<string>('');
   const [customExtras, setCustomExtras] = useState<{ id: string, name: string, price: number }[]>([]);
   const [newCustomExtraName, setNewCustomExtraName] = useState('');
   const [newCustomExtraPrice, setNewCustomExtraPrice] = useState('');
@@ -102,7 +101,6 @@ export default function App() {
   const [savedQuotes, setSavedQuotes] = useState<any[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [importedPrice, setImportedPrice] = useState<number | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [expandedClient, setExpandedClient] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -113,9 +111,6 @@ export default function App() {
   const [selectedQuoteDetails, setSelectedQuoteDetails] = useState<any | null>(null);
   
   const [showTerminarModal, setShowTerminarModal] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
-  const [isDesincrustando, setIsDesincrustando] = useState(false);
-  const [showDesincrustarConfirm, setShowDesincrustarConfirm] = useState(false);
 
   const currentMonthName = new Date().toLocaleString('es-AR', { month: 'long' });
   const capitalizedCurrentMonth = currentMonthName.charAt(0).toUpperCase() + currentMonthName.slice(1);
@@ -206,143 +201,13 @@ export default function App() {
     }
   };
 
-  const handleImportarDatos = async () => {
-    setIsImporting(true);
-    try {
-      const targetUrl = 'http://www.marcelomagni.com.ar/Terminar-2026.xlsx';
-      
-      // Utilizamos codetabs que maneja correctamente archivos binarios grandes
-      const response = await fetch('https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(targetUrl));
-      
-      if (!response || !response.ok) throw new Error('No se pudo descargar el archivo Excel');
-      
-      const arrayBuffer = await response.arrayBuffer();
-      const workbook = XLSX.read(arrayBuffer, { type: 'array' });
-      
-      for (const sheetName of workbook.SheetNames) {
-        const worksheet = workbook.Sheets[sheetName];
-        const data = XLSX.utils.sheet_to_json(worksheet);
-        
-        for (const row of data as any[]) {
-          const congreso = row['Congreso'] || row['CONGRESO'] || row['congreso'] || '';
-          const medida = row['N° y medida'] || row['N° Y MEDIDA'] || row['Medida'] || row['medida'] || '';
-          const fecha = row['FECHA'] || row['Fecha'] || row['fecha'] || '';
-          const lugar = row['Lugar'] || row['LUGAR'] || row['lugar'] || 'Cap.Fed';
-          const pValue = row['P'] || row['p'] || row['Presupuesto'] || 0;
-          
-          if (!congreso) continue;
-          
-          const congresoStr = congreso.toString().trim();
-          if (congresoStr.toLowerCase().startsWith('semana') || congresoStr.toLowerCase().startsWith('ver seguro')) {
-            continue;
-          }
-          
-          const words = congresoStr.split(' ');
-          const clienteImportado = words[0] || 'Desconocido';
-          const eventoImportado = words.slice(1).join(' ') || congresoStr;
-          
-          let sizeImportado = "4";
-          const medidaStr = medida.toString();
-          const match = medidaStr.match(/(\d+(?:[.,]\d+)?)\s*[xX]\s*(\d+(?:[.,]\d+)?)/);
-          if (match) {
-            const w = parseFloat(match[1].replace(',', '.'));
-            const d = parseFloat(match[2].replace(',', '.'));
-            const area = Math.round(w * d);
-            
-            const validSizes = Object.keys(BASE_PRICES).map(Number).sort((a,b) => a-b);
-            const closest = validSizes.reduce((prev, curr) => Math.abs(curr - area) < Math.abs(prev - area) ? curr : prev);
-            sizeImportado = closest.toString();
-          } else {
-            if (medidaStr.includes('10')) sizeImportado = "10";
-            else if (medidaStr.includes('8')) sizeImportado = "8";
-            else if (medidaStr.includes('6')) sizeImportado = "6";
-          }
-          
-          let cityImportada = CITIES[0].name;
-          const lugarStr = lugar.toString().toLowerCase();
-          for (const c of CITIES) {
-            if (lugarStr.includes(c.name.toLowerCase())) {
-              cityImportada = c.name;
-              break;
-            }
-          }
-          
-          const importedPrice = parseFloat(pValue.toString().replace(/[^0-9.-]+/g,"")) || null;
-          
-          let basePriceImp = 0;
-          let freightPriceImp = 0;
-          
-          if (importedPrice !== null && importedPrice > 0) {
-            basePriceImp = importedPrice;
-            freightPriceImp = 0;
-          } else {
-            basePriceImp = (BASE_PRICES[sizeImportado as keyof typeof BASE_PRICES] || 0) * (1 + (ipcData.value / 100));
-            const cityDataImp = CITIES.find(c => c.name === cityImportada) || CITIES[0];
-            freightPriceImp = (cityDataImp.name === "Cap.Fed" ? 0 : cityDataImp.distance * 5500) * (1 + (ipcData.value / 100));
-          }
-          
-          const quoteData = {
-            cliente: clienteImportado,
-            evento: eventoImportado,
-            fechaInicio: '',
-            fechaFin: '',
-            fechaImportada: fecha.toString(),
-            selectedCity: cityImportada,
-            selectedSize: sizeImportado,
-            extrasQty: {},
-            customExtras: [],
-            ipcMonth: ipcData.month || capitalizedCurrentMonth,
-            ipcValue: ipcData.value,
-            basePrice: basePriceImp,
-            freightPrice: freightPriceImp,
-            extrasTotal: 0,
-            grandTotal: basePriceImp + freightPriceImp,
-            isImported: true,
-            importedPrice: importedPrice !== null && importedPrice > 0 ? importedPrice : null,
-            createdAt: serverTimestamp()
-          };
-          
-          await addDoc(collection(db, 'quotes'), quoteData);
-        }
-      }
-      alert("Datos importados exitosamente desde el archivo Excel.");
-    } catch (error) {
-      console.error("Error importando datos:", error);
-      alert("Hubo un error al importar los datos. Verifica la consola para más detalles.");
-    } finally {
-      setIsImporting(false);
-    }
-  };
-
-  const handleDesincrustarDatos = async () => {
-    setIsDesincrustando(true);
-    try {
-      const importedQuotes = savedQuotes.filter(q => q.isImported);
-      for (const quote of importedQuotes) {
-        await deleteDoc(doc(db, 'quotes', quote.id));
-      }
-      setShowDesincrustarConfirm(false);
-      alert("Datos desincrustados exitosamente.");
-    } catch (error) {
-      console.error("Error desincrustando datos:", error);
-      alert("Hubo un error al desincrustar los datos.");
-    } finally {
-      setIsDesincrustando(false);
-    }
-  };
-
   // --- CALCULATIONS ---
   const ipcMultiplier = 1 + (ipcData.value / 100);
 
   const cityData = useMemo(() => CITIES.find(c => c.name === selectedCity) || CITIES[0], [selectedCity]);
   
-  const basePrice = importedPrice !== null && importedPrice > 0 
-    ? importedPrice 
-    : (BASE_PRICES[selectedSize as keyof typeof BASE_PRICES] || 0) * ipcMultiplier;
-    
-  const freightPrice = importedPrice !== null && importedPrice > 0
-    ? 0
-    : (cityData.name === "Cap.Fed" ? 0 : cityData.distance * 5500) * ipcMultiplier;
+  const basePrice = (BASE_PRICES[selectedSize as keyof typeof BASE_PRICES] || 0) * ipcMultiplier;
+  const freightPrice = (cityData.name === "Cap.Fed" ? 0 : cityData.distance * 5500) * ipcMultiplier;
   
   const eventDays = useMemo(() => {
     if (!startDate || !endDate) return 1;
@@ -385,7 +250,6 @@ export default function App() {
         evento,
         fechaInicio: startDate ? startDate.toISOString() : '',
         fechaFin: endDate ? endDate.toISOString() : '',
-        fechaImportada: (startDate || endDate) ? '' : fechaImportada,
         selectedCity,
         selectedSize,
         extrasQty,
@@ -396,7 +260,6 @@ export default function App() {
         freightPrice,
         extrasTotal,
         grandTotal,
-        ...(importedPrice !== null ? { importedPrice, isImported: true } : {})
       };
 
       if (editingId) {
@@ -416,12 +279,10 @@ export default function App() {
       setEvento('');
       setStartDate(null);
       setEndDate(null);
-      setFechaImportada('');
       setSelectedCity(CITIES[0].name);
       setSelectedSize("4");
       setExtrasQty({});
       setCustomExtras([]);
-      setImportedPrice(null);
     } catch (error) {
       console.error("Error saving quote", error);
       alert("Hubo un error al guardar el presupuesto.");
@@ -436,12 +297,10 @@ export default function App() {
     setEvento(quote.evento || '');
     setStartDate(quote.fechaInicio ? new Date(quote.fechaInicio) : null);
     setEndDate(quote.fechaFin ? new Date(quote.fechaFin) : null);
-    setFechaImportada(quote.fechaImportada || '');
     setSelectedCity(quote.selectedCity || CITIES[0].name);
     setSelectedSize(quote.selectedSize || "4");
     setExtrasQty(quote.extrasQty || {});
     setCustomExtras(quote.customExtras || []);
-    setImportedPrice(quote.importedPrice || null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -461,7 +320,6 @@ export default function App() {
     setEvento('');
     setStartDate(null);
     setEndDate(null);
-    setFechaImportada('');
     setSelectedCity(CITIES[0].name);
     setSelectedSize("4");
     setExtrasQty({});
@@ -559,7 +417,7 @@ export default function App() {
                     }}
                     locale="es"
                     dateFormat="dd/MM/yyyy"
-                    placeholderText={fechaImportada ? `Importado: ${fechaImportada}` : "Seleccionar rango de fechas"}
+                    placeholderText="Seleccionar rango de fechas"
                     className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-50 py-1.5 px-2 text-xs border"
                     popperClassName="centered-popper"
                   />
@@ -800,20 +658,6 @@ export default function App() {
               </h2>
             </div>
             <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-              <button
-                onClick={handleImportarDatos}
-                disabled={isImporting}
-                className="text-[10px] font-medium text-white bg-indigo-600 hover:bg-indigo-700 px-2 py-1 rounded transition-colors disabled:opacity-50"
-              >
-                {isImporting ? 'IMPORTANDO...' : 'IMPORTAR DATOS'}
-              </button>
-              <button
-                onClick={() => setShowDesincrustarConfirm(true)}
-                disabled={isDesincrustando}
-                className="text-[10px] font-medium text-indigo-700 bg-indigo-100 hover:bg-indigo-200 px-2 py-1 rounded transition-colors disabled:opacity-50"
-              >
-                {isDesincrustando ? 'DESINCRUSTANDO...' : 'DESINCRUSTAR DATOS'}
-              </button>
               <input
                 type="text"
                 placeholder="Buscar..."
@@ -844,7 +688,7 @@ export default function App() {
                     {expandedClient === clientName && (
                       <ul className="bg-gray-50/50 divide-y divide-gray-100 border-t border-gray-100">
                         {(quotes as any[]).map(quote => (
-                          <li key={quote.id} className={`p-2 sm:p-3 pl-4 sm:pl-6 flex flex-col gap-2 transition-colors ${quote.isImported ? 'bg-indigo-50/50 hover:bg-indigo-100/50 border-l-2 border-indigo-400' : 'hover:bg-gray-100/50'}`}>
+                          <li key={quote.id} className="p-2 sm:p-3 pl-4 sm:pl-6 flex flex-col gap-2 transition-colors hover:bg-gray-100/50">
                             <div 
                               className="flex justify-between items-start gap-2 cursor-pointer"
                               onClick={() => setSelectedQuoteDetails(quote)}
@@ -852,16 +696,13 @@ export default function App() {
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-2">
                                   <h3 className="text-[11px] sm:text-xs font-medium text-gray-900 truncate">{quote.evento}</h3>
-                                  {quote.isImported && (
-                                    <span className="text-[8px] font-bold bg-indigo-200 text-indigo-800 px-1.5 py-0.5 rounded uppercase tracking-wider">Importado</span>
-                                  )}
                                 </div>
                                 <p className="text-[9px] sm:text-[10px] text-gray-500 truncate mt-0.5">
                                   {quote.selectedCity} • {quote.selectedSize}m²
                                 </p>
-                                {(quote.fechaInicio || quote.fechaFin || quote.fechaImportada) && (
+                                {(quote.fechaInicio || quote.fechaFin) && (
                                   <p className="text-[9px] sm:text-[10px] text-gray-500 truncate mt-0.5">
-                                    {quote.fechaImportada ? quote.fechaImportada : `${quote.fechaInicio ? new Date(quote.fechaInicio).toLocaleDateString('es-AR') : '?'} al ${quote.fechaFin ? new Date(quote.fechaFin).toLocaleDateString('es-AR') : '?'}`}
+                                    {`${quote.fechaInicio ? new Date(quote.fechaInicio).toLocaleDateString('es-AR') : '?'} al ${quote.fechaFin ? new Date(quote.fechaFin).toLocaleDateString('es-AR') : '?'}`}
                                   </p>
                                 )}
                               </div>
@@ -933,34 +774,6 @@ export default function App() {
                 className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-md transition-colors"
               >
                 Sí, eliminar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Custom Desincrustar Confirmation Modal */}
-      {showDesincrustarConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-4 sm:p-5 overflow-hidden animate-in fade-in zoom-in duration-200">
-            <h3 className="text-lg font-bold text-gray-900 mb-2">¿Desincrustar datos?</h3>
-            <p className="text-sm text-gray-500 mb-5">
-              Esta acción eliminará todos los presupuestos que fueron importados desde el Excel.
-            </p>
-            <div className="flex justify-end gap-3">
-              <button 
-                onClick={() => setShowDesincrustarConfirm(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
-                disabled={isDesincrustando}
-              >
-                Cancelar
-              </button>
-              <button 
-                onClick={handleDesincrustarDatos}
-                className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-md transition-colors flex items-center gap-2"
-                disabled={isDesincrustando}
-              >
-                {isDesincrustando ? 'Eliminando...' : 'Sí, desincrustar'}
               </button>
             </div>
           </div>
@@ -1067,7 +880,7 @@ export default function App() {
                 <div>
                   <p className="text-[10px] text-gray-500 uppercase font-semibold tracking-wider">Fechas</p>
                   <p className="text-xs font-medium text-gray-900 mt-0.5">
-                    {selectedQuoteDetails.fechaImportada ? selectedQuoteDetails.fechaImportada : `${selectedQuoteDetails.fechaInicio ? new Date(selectedQuoteDetails.fechaInicio).toLocaleDateString('es-AR') : '-'} al ${selectedQuoteDetails.fechaFin ? new Date(selectedQuoteDetails.fechaFin).toLocaleDateString('es-AR') : '-'}`}
+                    {`${selectedQuoteDetails.fechaInicio ? new Date(selectedQuoteDetails.fechaInicio).toLocaleDateString('es-AR') : '-'} al ${selectedQuoteDetails.fechaFin ? new Date(selectedQuoteDetails.fechaFin).toLocaleDateString('es-AR') : '-'}`}
                   </p>
                 </div>
                 <div>
