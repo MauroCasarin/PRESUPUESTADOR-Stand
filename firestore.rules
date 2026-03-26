@@ -60,7 +60,7 @@ service cloud.firestore {
     
     function isValidQuote() {
       return hasRequiredFields(['cliente', 'evento', 'selectedCity', 'selectedSize', 'extrasQty', 'ipcMonth', 'ipcValue', 'basePrice', 'freightPrice', 'extrasTotal', 'grandTotal']) &&
-             hasOnlyAllowedFields(['cliente', 'evento', 'fechaInicio', 'fechaFin', 'fechaImportada', 'selectedCity', 'selectedSize', 'extrasQty', 'customExtras', 'ipcMonth', 'ipcValue', 'basePrice', 'freightPrice', 'extrasTotal', 'grandTotal', 'createdAt', 'isImported']) &&
+             hasOnlyAllowedFields(['cliente', 'evento', 'fechaInicio', 'fechaFin', 'fechaImportada', 'selectedCity', 'selectedSize', 'extrasQty', 'customExtras', 'ipcMonth', 'ipcValue', 'basePrice', 'freightPrice', 'extrasTotal', 'grandTotal', 'createdAt', 'isImported', 'importedPrice']) &&
              validStringLength('cliente', 1, 200) &&
              validStringLength('evento', 1, 200) &&
              (!('fechaInicio' in request.resource.data) || validStringLength('fechaInicio', 0, 30)) &&
@@ -71,13 +71,14 @@ service cloud.firestore {
              request.resource.data.extrasQty is map &&
              (!('customExtras' in request.resource.data) || request.resource.data.customExtras is list) &&
              validStringLength('ipcMonth', 1, 50) &&
-             isPositive('ipcValue') &&
-             isPositive('basePrice') &&
-             isPositive('freightPrice') &&
-             isPositive('extrasTotal') &&
-             isPositive('grandTotal') &&
+             request.resource.data.ipcValue is number && request.resource.data.ipcValue >= 0 &&
+             request.resource.data.basePrice is number && request.resource.data.basePrice >= 0 &&
+             request.resource.data.freightPrice is number && request.resource.data.freightPrice >= 0 &&
+             request.resource.data.extrasTotal is number && request.resource.data.extrasTotal >= 0 &&
+             request.resource.data.grandTotal is number && request.resource.data.grandTotal >= 0 &&
              (!('createdAt' in request.resource.data) || request.resource.data.createdAt is timestamp) &&
-             (!('isImported' in request.resource.data) || request.resource.data.isImported is bool);
+             (!('isImported' in request.resource.data) || request.resource.data.isImported is bool) &&
+             (!('importedPrice' in request.resource.data) || request.resource.data.importedPrice == null || (request.resource.data.importedPrice is number && request.resource.data.importedPrice >= 0));
     }
 
     // ===============================================================

@@ -102,6 +102,7 @@ export default function App() {
   const [savedQuotes, setSavedQuotes] = useState<any[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [importedPrice, setImportedPrice] = useState<number | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [expandedClient, setExpandedClient] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -218,66 +219,96 @@ export default function App() {
       const arrayBuffer = await response.arrayBuffer();
       const workbook = XLSX.read(arrayBuffer, { type: 'array' });
       
-      const firstSheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[firstSheetName];
-      
-      const data = XLSX.utils.sheet_to_json(worksheet);
-      
-      for (const row of data as any[]) {
-        const congreso = row['Congreso'] || row['CONGRESO'] || row['congreso'] || '';
-        const medida = row['N° y medida'] || row['N° Y MEDIDA'] || row['Medida'] || row['medida'] || '4';
-        const fecha = row['FECHA'] || row['Fecha'] || row['fecha'] || '';
-        const lugar = row['Lugar'] || row['LUGAR'] || row['lugar'] || 'Cap.Fed';
+      for (const sheetName of workbook.SheetNames) {
+        const worksheet = workbook.Sheets[sheetName];
+        const data = XLSX.utils.sheet_to_json(worksheet);
         
-        if (!congreso) continue;
-        
-        const words = congreso.toString().trim().split(' ');
-        const clienteImportado = words[0] || 'Desconocido';
-        const eventoImportado = words.slice(1).join(' ') || congreso.toString();
-        
-        let sizeImportado = "4";
-        const medidaStr = medida.toString();
-        if (medidaStr.includes('10')) sizeImportado = "10";
-        else if (medidaStr.includes('8')) sizeImportado = "8";
-        else if (medidaStr.includes('6')) sizeImportado = "6";
-        
-        let cityImportada = CITIES[0].name;
-        const lugarStr = lugar.toString().toLowerCase();
-        for (const c of CITIES) {
-          if (lugarStr.includes(c.name.toLowerCase())) {
-            cityImportada = c.name;
-            break;
+        for (const row of data as any[]) {
+          const congreso = row['Congreso'] || row['CONGRESO'] || row['congreso'] || '';
+          const medida = row['N° y medida'] || row['N° Y MEDIDA'] || row['Medida'] || row['medida'] || '';
+          const fecha = row['FECHA'] || row['Fecha'] || row['fecha'] || '';
+          const lugar = row['Lugar'] || row['LUGAR'] || row['lugar'] || 'Cap.Fed';
+          const pValue = row['P'] || row['p'] || row['Presupuesto'] || 0;
+          
+          if (!congreso) continue;
+          
+          const congresoStr = congreso.toString().trim();
+          if (congresoStr.toLowerCase().startsWith('semana') || congresoStr.toLowerCase().startsWith('ver seguro')) {
+            continue;
           }
+          
+          const words = congresoStr.split(' ');
+          const clienteImportado = words[0] || 'Desconocido';
+          const eventoImportado = words.slice(1).join(' ') || congresoStr;
+          
+          let sizeImportado = "4";
+          const medidaStr = medida.toString();
+          const match = medidaStr.match(/(\d+(?:[.,]\d+)?)\s*[xX]\s*(\d+(?:[.,]\d+)?)/);
+          if (match) {
+            const w = parseFloat(match[1].replace(',', '.'));
+            const d = parseFloat(match[2].replace(',', '.'));
+            const area = Math.round(w * d);
+            
+            const validSizes = Object.keys(BASE_PRICES).map(Number).sort((a,b) => a-b);
+            const closest = validSizes.reduce((prev, curr) => Math.abs(curr - area) < Math.abs(prev - area) ? curr : prev);
+            sizeImportado = closest.toString();
+          } else {
+            if (medidaStr.includes('10')) sizeImportado = "10";
+            else if (medidaStr.includes('8')) sizeImportado = "8";
+            else if (medidaStr.includes('6')) sizeImportado = "6";
+          }
+          
+          let cityImportada = CITIES[0].name;
+          const lugarStr = lugar.toString().toLowerCase();
+          for (const c of CITIES) {
+            if (lugarStr.includes(c.name.toLowerCase())) {
+              cityImportada = c.name;
+              break;
+            }
+          }
+          
+          const importedPrice = parseFloat(pValue.toString().replace(/[^0-9.-]+/g,"")) || null;
+          
+          let basePriceImp = 0;
+          let freightPriceImp = 0;
+          
+          if (importedPrice !== null && importedPrice > 0) {
+            basePriceImp = importedPrice;
+            freightPriceImp = 0;
+          } else {
+            basePriceImp = (BASE_PRICES[sizeImportado as keyof typeof BASE_PRICES] || 0) * (1 + (ipcData.value / 100));
+            const cityDataImp = CITIES.find(c => c.name === cityImportada) || CITIES[0];
+            freightPriceImp = (cityDataImp.name === "Cap.Fed" ? 0 : cityDataImp.distance * 5500) * (1 + (ipcData.value / 100));
+          }
+          
+          const quoteData = {
+            cliente: clienteImportado,
+            evento: eventoImportado,
+            fechaInicio: '',
+            fechaFin: '',
+            fechaImportada: fecha.toString(),
+            selectedCity: cityImportada,
+            selectedSize: sizeImportado,
+            extrasQty: {},
+            customExtras: [],
+            ipcMonth: ipcData.month || capitalizedCurrentMonth,
+            ipcValue: ipcData.value,
+            basePrice: basePriceImp,
+            freightPrice: freightPriceImp,
+            extrasTotal: 0,
+            grandTotal: basePriceImp + freightPriceImp,
+            isImported: true,
+            importedPrice: importedPrice !== null && importedPrice > 0 ? importedPrice : null,
+            createdAt: serverTimestamp()
+          };
+          
+          await addDoc(collection(db, 'quotes'), quoteData);
         }
-        
-        const basePriceImp = (BASE_PRICES[sizeImportado as keyof typeof BASE_PRICES] || 0) * (1 + (ipcData.value / 100));
-        const cityDataImp = CITIES.find(c => c.name === cityImportada) || CITIES[0];
-        const freightPriceImp = (cityDataImp.name === "Cap.Fed" ? 0 : cityDataImp.distance * 5500) * (1 + (ipcData.value / 100));
-        
-        const quoteData = {
-          cliente: clienteImportado,
-          evento: eventoImportado,
-          fechaInicio: '',
-          fechaFin: '',
-          fechaImportada: fecha.toString(),
-          selectedCity: cityImportada,
-          selectedSize: sizeImportado,
-          extrasQty: {},
-          customExtras: [],
-          ipcMonth: ipcData.month || capitalizedCurrentMonth,
-          ipcValue: ipcData.value,
-          basePrice: basePriceImp,
-          freightPrice: freightPriceImp,
-          extrasTotal: 0,
-          grandTotal: basePriceImp + freightPriceImp,
-          isImported: true,
-          createdAt: serverTimestamp()
-        };
-        
-        await addDoc(collection(db, 'quotes'), quoteData);
       }
+      alert("Datos importados exitosamente desde el archivo Excel.");
     } catch (error) {
       console.error("Error importando datos:", error);
+      alert("Hubo un error al importar los datos. Verifica la consola para más detalles.");
     } finally {
       setIsImporting(false);
     }
@@ -291,8 +322,10 @@ export default function App() {
         await deleteDoc(doc(db, 'quotes', quote.id));
       }
       setShowDesincrustarConfirm(false);
+      alert("Datos desincrustados exitosamente.");
     } catch (error) {
       console.error("Error desincrustando datos:", error);
+      alert("Hubo un error al desincrustar los datos.");
     } finally {
       setIsDesincrustando(false);
     }
@@ -303,8 +336,13 @@ export default function App() {
 
   const cityData = useMemo(() => CITIES.find(c => c.name === selectedCity) || CITIES[0], [selectedCity]);
   
-  const basePrice = (BASE_PRICES[selectedSize as keyof typeof BASE_PRICES] || 0) * ipcMultiplier;
-  const freightPrice = (cityData.name === "Cap.Fed" ? 0 : cityData.distance * 5500) * ipcMultiplier;
+  const basePrice = importedPrice !== null && importedPrice > 0 
+    ? importedPrice 
+    : (BASE_PRICES[selectedSize as keyof typeof BASE_PRICES] || 0) * ipcMultiplier;
+    
+  const freightPrice = importedPrice !== null && importedPrice > 0
+    ? 0
+    : (cityData.name === "Cap.Fed" ? 0 : cityData.distance * 5500) * ipcMultiplier;
   
   const eventDays = useMemo(() => {
     if (!startDate || !endDate) return 1;
@@ -358,6 +396,7 @@ export default function App() {
         freightPrice,
         extrasTotal,
         grandTotal,
+        ...(importedPrice !== null ? { importedPrice, isImported: true } : {})
       };
 
       if (editingId) {
@@ -382,6 +421,7 @@ export default function App() {
       setSelectedSize("4");
       setExtrasQty({});
       setCustomExtras([]);
+      setImportedPrice(null);
     } catch (error) {
       console.error("Error saving quote", error);
       alert("Hubo un error al guardar el presupuesto.");
@@ -401,6 +441,7 @@ export default function App() {
     setSelectedSize(quote.selectedSize || "4");
     setExtrasQty(quote.extrasQty || {});
     setCustomExtras(quote.customExtras || []);
+    setImportedPrice(quote.importedPrice || null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
