@@ -59,7 +59,7 @@ service cloud.firestore {
     
     function isValidQuote() {
       return hasRequiredFields(['cliente', 'evento', 'selectedCity', 'selectedSize', 'extrasQty', 'ipcMonth', 'ipcValue', 'basePrice', 'freightPrice', 'extrasTotal', 'grandTotal']) &&
-             hasOnlyAllowedFields(['cliente', 'evento', 'fechaInicio', 'fechaFin', 'selectedCity', 'selectedSize', 'extrasQty', 'ipcMonth', 'ipcValue', 'basePrice', 'freightPrice', 'extrasTotal', 'grandTotal', 'createdAt']) &&
+             hasOnlyAllowedFields(['cliente', 'evento', 'fechaInicio', 'fechaFin', 'selectedCity', 'selectedSize', 'extrasQty', 'customExtras', 'ipcMonth', 'ipcValue', 'basePrice', 'freightPrice', 'extrasTotal', 'grandTotal', 'createdAt']) &&
              validStringLength('cliente', 1, 200) &&
              validStringLength('evento', 1, 200) &&
              (!('fechaInicio' in request.resource.data) || validStringLength('fechaInicio', 0, 20)) &&
@@ -67,6 +67,7 @@ service cloud.firestore {
              validStringLength('selectedCity', 1, 100) &&
              validStringLength('selectedSize', 1, 10) &&
              request.resource.data.extrasQty is map &&
+             (!('customExtras' in request.resource.data) || request.resource.data.customExtras is list) &&
              validStringLength('ipcMonth', 1, 50) &&
              isPositive('ipcValue') &&
              isPositive('basePrice') &&

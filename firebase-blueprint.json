@@ -33,6 +33,18 @@
           "type": "object",
           "description": "Map of extra item IDs to their quantities."
         },
+        "customExtras": {
+          "type": "array",
+          "description": "List of custom extra items.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "price": { "type": "number" }
+            }
+          }
+        },
         "ipcMonth": {
           "type": "string",
           "description": "Month of the IPC used."
