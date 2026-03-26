@@ -756,7 +756,10 @@ export default function App() {
 
       {/* Custom Delete Confirmation Modal */}
       {deleteConfirmId && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+        <div 
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm"
+          onClick={(e) => { if (e.target === e.currentTarget) setDeleteConfirmId(null); }}
+        >
           <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-4 sm:p-5 overflow-hidden animate-in fade-in zoom-in duration-200">
             <h3 className="text-lg font-bold text-gray-900 mb-2">¿Eliminar presupuesto?</h3>
             <p className="text-sm text-gray-500 mb-5">
@@ -782,7 +785,10 @@ export default function App() {
 
       {/* Terminar Modal */}
       {showTerminarModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4 backdrop-blur-sm">
+        <div 
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2 sm:p-4 backdrop-blur-sm"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowTerminarModal(false); }}
+        >
           <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200 relative">
             <div className="flex justify-between items-center p-3 border-b border-gray-200 bg-gray-50">
               <h3 className="text-sm font-bold text-gray-900">TERMINAR</h3>
@@ -806,7 +812,10 @@ export default function App() {
 
       {/* Sue Modal */}
       {showSueModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+        <div 
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowSueModal(false); }}
+        >
           <div className="bg-white rounded-lg shadow-xl max-w-xs w-full p-4 sm:p-5 overflow-hidden animate-in fade-in zoom-in duration-200 relative">
             <button 
               onClick={() => setShowSueModal(false)}
@@ -856,7 +865,10 @@ export default function App() {
 
       {/* Quote Details Modal */}
       {selectedQuoteDetails && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+        <div 
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm"
+          onClick={(e) => { if (e.target === e.currentTarget) setSelectedQuoteDetails(null); }}
+        >
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-4 sm:p-5 overflow-hidden animate-in fade-in zoom-in duration-200 relative max-h-[90vh] flex flex-col">
             <button 
               onClick={() => setSelectedQuoteDetails(null)}
