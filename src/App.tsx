@@ -210,15 +210,8 @@ export default function App() {
     try {
       const targetUrl = 'http://www.marcelomagni.com.ar/Terminar-2026.xlsx';
       
-      let response;
-      try {
-        // Intento 1: allorigins
-        response = await fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(targetUrl));
-        if (!response.ok) throw new Error('Proxy 1 falló');
-      } catch (e) {
-        // Intento 2: codetabs (fallback)
-        response = await fetch('https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(targetUrl));
-      }
+      // Utilizamos codetabs que maneja correctamente archivos binarios grandes
+      const response = await fetch('https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(targetUrl));
       
       if (!response || !response.ok) throw new Error('No se pudo descargar el archivo Excel');
       

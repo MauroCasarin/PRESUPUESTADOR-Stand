@@ -1,5 +1,16 @@
 import fetch from 'node-fetch';
-fetch('https://apis.datos.gob.ar/series/api/series/?ids=148.3_INIVARNAL_D_T_22&limit=1&sort=desc')
-  .then(res => res.text())
-  .then(text => console.log(text))
-  .catch(err => console.error(err));
+
+async function test() {
+  const targetUrl = 'http://www.marcelomagni.com.ar/Terminar-2026.xlsx';
+  
+  try {
+    const res = await fetch('https://corsproxy.org/api?url=' + encodeURIComponent(targetUrl));
+    console.log('corsproxy.org status:', res.status);
+    const buf = await res.arrayBuffer();
+    console.log('corsproxy.org size:', buf.byteLength);
+  } catch(e) {
+    console.log('corsproxy.org error', e);
+  }
+}
+
+test();
