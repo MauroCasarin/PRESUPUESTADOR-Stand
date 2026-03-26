@@ -223,7 +223,7 @@ export default function App() {
       return total + extraPrice;
     }, 0);
     
-    const customExtrasTotal = customExtras.reduce((total, extra) => total + (extra.price * ipcMultiplier), 0);
+    const customExtrasTotal = customExtras.reduce((total, extra) => total + extra.price, 0);
     
     return standardExtras + customExtrasTotal;
   }, [extrasQty, customExtras, ipcMultiplier, eventDays]);
@@ -532,7 +532,7 @@ export default function App() {
                   <div key={extra.id} className="p-2 flex justify-between items-center text-xs border-t border-gray-100">
                     <span>{extra.name}</span>
                     <div className="flex items-center gap-2">
-                      <span>{formatCurrency(extra.price * ipcMultiplier)}</span>
+                      <span>{formatCurrency(extra.price)}</span>
                       <button onClick={() => setCustomExtras(prev => prev.filter(e => e.id !== extra.id))} className="text-red-500 hover:text-red-700">
                         <Trash2 className="w-3 h-3" />
                       </button>
@@ -544,7 +544,7 @@ export default function App() {
                     type="text"
                     value={newCustomExtraName}
                     onChange={(e) => setNewCustomExtraName(e.target.value)}
-                    placeholder="Adicional Vario"
+                    placeholder="ADICIONAL"
                     className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-white py-1.5 px-2 text-xs border"
                   />
                   <input 
@@ -874,10 +874,10 @@ export default function App() {
                     <span className="text-xs font-medium text-gray-900">{formatCurrency(selectedQuoteDetails.freightPrice)}</span>
                   </div>
                   
-                  {selectedQuoteDetails.extrasQty && Object.keys(selectedQuoteDetails.extrasQty).length > 0 && (
+                  {((selectedQuoteDetails.extrasQty && Object.keys(selectedQuoteDetails.extrasQty).length > 0) || (selectedQuoteDetails.customExtras && selectedQuoteDetails.customExtras.length > 0)) && (
                     <div className="pt-2 mt-2 border-t border-gray-100">
                       <p className="text-[10px] text-gray-500 font-semibold mb-1">Adicionales:</p>
-                      {Object.entries(selectedQuoteDetails.extrasQty).map(([extraId, qty]) => {
+                      {selectedQuoteDetails.extrasQty && Object.entries(selectedQuoteDetails.extrasQty).map(([extraId, qty]) => {
                         if ((qty as number) <= 0) return null;
                         const extraDef = EXTRAS.find(e => e.id === extraId);
                         if (!extraDef) return null;
@@ -902,6 +902,12 @@ export default function App() {
                           </div>
                         );
                       })}
+                      {selectedQuoteDetails.customExtras && selectedQuoteDetails.customExtras.map((extra: any) => (
+                        <div key={extra.id} className="flex justify-between items-center pl-2 mt-1">
+                          <span className="text-[11px] text-gray-600">• {extra.name}</span>
+                          <span className="text-[11px] font-medium text-gray-900">{formatCurrency(extra.price)}</span>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>

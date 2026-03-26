@@ -62,8 +62,8 @@ service cloud.firestore {
              hasOnlyAllowedFields(['cliente', 'evento', 'fechaInicio', 'fechaFin', 'selectedCity', 'selectedSize', 'extrasQty', 'customExtras', 'ipcMonth', 'ipcValue', 'basePrice', 'freightPrice', 'extrasTotal', 'grandTotal', 'createdAt']) &&
              validStringLength('cliente', 1, 200) &&
              validStringLength('evento', 1, 200) &&
-             (!('fechaInicio' in request.resource.data) || validStringLength('fechaInicio', 0, 20)) &&
-             (!('fechaFin' in request.resource.data) || validStringLength('fechaFin', 0, 20)) &&
+             (!('fechaInicio' in request.resource.data) || validStringLength('fechaInicio', 0, 30)) &&
+             (!('fechaFin' in request.resource.data) || validStringLength('fechaFin', 0, 30)) &&
              validStringLength('selectedCity', 1, 100) &&
              validStringLength('selectedSize', 1, 10) &&
              request.resource.data.extrasQty is map &&
