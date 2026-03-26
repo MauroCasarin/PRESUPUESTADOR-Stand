@@ -24,6 +24,7 @@ service cloud.firestore {
     //   - extrasTotal: number (required) - Calculated extras total.
     //   - grandTotal: number (required) - Calculated grand total.
     //   - createdAt: timestamp (optional) - When the quote was created.
+    //   - isImported: boolean (optional) - Whether the quote was imported from Excel.
     //
     // ===============================================================
 
@@ -59,11 +60,12 @@ service cloud.firestore {
     
     function isValidQuote() {
       return hasRequiredFields(['cliente', 'evento', 'selectedCity', 'selectedSize', 'extrasQty', 'ipcMonth', 'ipcValue', 'basePrice', 'freightPrice', 'extrasTotal', 'grandTotal']) &&
-             hasOnlyAllowedFields(['cliente', 'evento', 'fechaInicio', 'fechaFin', 'selectedCity', 'selectedSize', 'extrasQty', 'customExtras', 'ipcMonth', 'ipcValue', 'basePrice', 'freightPrice', 'extrasTotal', 'grandTotal', 'createdAt']) &&
+             hasOnlyAllowedFields(['cliente', 'evento', 'fechaInicio', 'fechaFin', 'fechaImportada', 'selectedCity', 'selectedSize', 'extrasQty', 'customExtras', 'ipcMonth', 'ipcValue', 'basePrice', 'freightPrice', 'extrasTotal', 'grandTotal', 'createdAt', 'isImported']) &&
              validStringLength('cliente', 1, 200) &&
              validStringLength('evento', 1, 200) &&
              (!('fechaInicio' in request.resource.data) || validStringLength('fechaInicio', 0, 30)) &&
              (!('fechaFin' in request.resource.data) || validStringLength('fechaFin', 0, 30)) &&
+             (!('fechaImportada' in request.resource.data) || validStringLength('fechaImportada', 0, 100)) &&
              validStringLength('selectedCity', 1, 100) &&
              validStringLength('selectedSize', 1, 10) &&
              request.resource.data.extrasQty is map &&
@@ -74,7 +76,8 @@ service cloud.firestore {
              isPositive('freightPrice') &&
              isPositive('extrasTotal') &&
              isPositive('grandTotal') &&
-             (!('createdAt' in request.resource.data) || request.resource.data.createdAt is timestamp);
+             (!('createdAt' in request.resource.data) || request.resource.data.createdAt is timestamp) &&
+             (!('isImported' in request.resource.data) || request.resource.data.isImported is bool);
     }
 
     // ===============================================================
