@@ -22,7 +22,8 @@ import {
   X,
   LogOut,
   LogIn,
-  Copy
+  Copy,
+  Share2
 } from 'lucide-react';
 import { db } from './firebase';
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp, getDocFromServer } from 'firebase/firestore';
@@ -153,8 +154,16 @@ export default function App() {
   const [isSueUnlocked, setIsSueUnlocked] = useState(false);
   const [selectedQuoteDetails, setSelectedQuoteDetails] = useState<any | null>(null);
   const [showDetailedBreakdown, setShowDetailedBreakdown] = useState(false);
+  const [showSummaryDropdown, setShowSummaryDropdown] = useState(false);
   
   const [showTerminarModal, setShowTerminarModal] = useState(false);
+
+  useEffect(() => {
+    if (!selectedQuoteDetails) {
+      setShowDetailedBreakdown(false);
+      setShowSummaryDropdown(false);
+    }
+  }, [selectedQuoteDetails]);
 
   const currentMonthName = new Date().toLocaleString('es-AR', { month: 'long' });
   const capitalizedCurrentMonth = currentMonthName.charAt(0).toUpperCase() + currentMonthName.slice(1);
@@ -1349,134 +1358,6 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="mb-6">
-                <h4 className="text-xs font-bold text-gray-900 mb-2 uppercase tracking-wider">Producto / Servicio (Resumen)</h4>
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 relative group">
-                  <p className="text-xs text-gray-800 font-mono leading-relaxed select-all pr-8">
-                    {selectedQuoteDetails.cliente} / STAND: {selectedQuoteDetails.evento} / {selectedQuoteDetails.fechaInicio ? new Date(selectedQuoteDetails.fechaInicio).toLocaleDateString('es-AR') : '-'} al {selectedQuoteDetails.fechaFin ? new Date(selectedQuoteDetails.fechaFin).toLocaleDateString('es-AR') : '-'} / {selectedQuoteDetails.selectedCity}{selectedQuoteDetails.lugarArmado ? ` - ${selectedQuoteDetails.lugarArmado}` : ''} / {selectedQuoteDetails.clientPaymentDays > 0 ? `Pago a ${selectedQuoteDetails.clientPaymentDays} días / ` : ''}{formatCurrency(selectedQuoteDetails.grandTotal)}
-                  </p>
-                  <button 
-                    onClick={() => {
-                      const text = `${selectedQuoteDetails.cliente} / STAND: ${selectedQuoteDetails.evento} / ${selectedQuoteDetails.fechaInicio ? new Date(selectedQuoteDetails.fechaInicio).toLocaleDateString('es-AR') : '-'} al ${selectedQuoteDetails.fechaFin ? new Date(selectedQuoteDetails.fechaFin).toLocaleDateString('es-AR') : '-'} / ${selectedQuoteDetails.selectedCity}${selectedQuoteDetails.lugarArmado ? ` - ${selectedQuoteDetails.lugarArmado}` : ''} / ${selectedQuoteDetails.clientPaymentDays > 0 ? `Pago a ${selectedQuoteDetails.clientPaymentDays} días / ` : ''}${formatCurrency(selectedQuoteDetails.grandTotal)}`;
-                      navigator.clipboard.writeText(text);
-                    }}
-                    className="absolute top-2 right-2 p-1.5 bg-white border border-gray-200 rounded shadow-sm opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 hover:text-blue-600"
-                    title="Copiar texto"
-                  >
-                    <Copy className="w-3 h-3" />
-                  </button>
-                </div>
-              </div>
-
-              <div className="mb-6">
-                <button 
-                  onClick={() => setShowDetailedBreakdown(!showDetailedBreakdown)}
-                  className="flex items-center justify-between w-full text-left text-xs font-bold text-gray-900 mb-2 uppercase tracking-wider focus:outline-none"
-                >
-                  <span>Detalle Técnico</span>
-                  {showDetailedBreakdown ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                </button>
-                
-                {showDetailedBreakdown && (
-                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 relative group">
-                    <div className="text-xs text-gray-800 font-mono leading-relaxed select-all pr-8 space-y-1">
-                      <p>1. Lote N° {selectedQuoteDetails.lote || '-'} - Medida: {selectedQuoteDetails.standAncho || '-'}x{selectedQuoteDetails.standProfundo || '-'}m ({selectedQuoteDetails.selectedSize}m²)</p>
-                      <p>2. Estructuras de madera pintada.</p>
-                      <p>3. Piso {selectedQuoteDetails.extrasQty?.['piso'] ? 'melamina' : 'alfombra'}.</p>
-                      
-                      {selectedQuoteDetails.graficasList && selectedQuoteDetails.graficasList.length > 0 && (
-                        <div>
-                          <p>4. Gráficas:</p>
-                          <ul className="pl-4">
-                            {selectedQuoteDetails.graficasList.map((g: any, idx: number) => (
-                              <li key={idx}>- {g.ancho}x{g.alto}m</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                      
-                      {((selectedQuoteDetails.extrasQty && Object.keys(selectedQuoteDetails.extrasQty).filter(k => k !== 'piso' && k !== 'alfombra' && k !== 'corporeo' && !k.startsWith('tv')).length > 0) || (selectedQuoteDetails.customExtras && selectedQuoteDetails.customExtras.length > 0)) && (
-                        <div>
-                          <p>5. Adicionales:</p>
-                          <ul className="pl-4">
-                            {Object.entries(selectedQuoteDetails.extrasQty || {}).map(([key, qty]) => {
-                              if (key === 'piso' || key === 'alfombra' || key === 'corporeo' || key.startsWith('tv') || !qty) return null;
-                              const extra = EXTRAS.find(e => e.id === key);
-                              return extra ? <li key={key}>- {extra.name} (x{qty as number})</li> : null;
-                            })}
-                            {selectedQuoteDetails.customExtras?.map((extra: any, idx: number) => (
-                              <li key={`custom-${idx}`}>- {extra.name}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                      
-                      {selectedQuoteDetails.extrasQty?.['corporeo'] > 0 && (
-                        <p>6. Corpóreo: {selectedQuoteDetails.extrasQty['corporeo'] as number}m ancho</p>
-                      )}
-                      
-                      {Object.entries(selectedQuoteDetails.extrasQty || {}).filter(([k, v]) => k.startsWith('tv') && (v as number) > 0).map(([k, v]) => {
-                        const tv = EXTRAS.find(e => e.id === k);
-                        return tv ? <p key={k}>7. TV: {tv.name.replace('TV ', '')} (x{v as number})</p> : null;
-                      })}
-                      
-                      <p>8. Luminaria Led.</p>
-                      <p>9. Instalación eléctrica: caja con tablero y disyuntor.</p>
-                    </div>
-                    
-                    <button 
-                      onClick={() => {
-                        const lines = [
-                          `1. Lote N° ${selectedQuoteDetails.lote || '-'} - Medida: ${selectedQuoteDetails.standAncho || '-'}x${selectedQuoteDetails.standProfundo || '-'}m (${selectedQuoteDetails.selectedSize}m²)`,
-                          `2. Estructuras de madera pintada.`,
-                          `3. Piso ${selectedQuoteDetails.extrasQty?.['piso'] ? 'melamina' : 'alfombra'}.`
-                        ];
-                        
-                        if (selectedQuoteDetails.graficasList && selectedQuoteDetails.graficasList.length > 0) {
-                          lines.push(`4. Gráficas:`);
-                          selectedQuoteDetails.graficasList.forEach((g: any) => {
-                            lines.push(`   - ${g.ancho}x${g.alto}m`);
-                          });
-                        }
-                        
-                        const hasOtherExtras = (selectedQuoteDetails.extrasQty && Object.keys(selectedQuoteDetails.extrasQty).filter(k => k !== 'piso' && k !== 'alfombra' && k !== 'corporeo' && !k.startsWith('tv')).length > 0) || (selectedQuoteDetails.customExtras && selectedQuoteDetails.customExtras.length > 0);
-                        if (hasOtherExtras) {
-                          lines.push(`5. Adicionales:`);
-                          Object.entries(selectedQuoteDetails.extrasQty || {}).forEach(([key, qty]) => {
-                            if (key === 'piso' || key === 'alfombra' || key === 'corporeo' || key.startsWith('tv') || !qty) return;
-                            const extra = EXTRAS.find(e => e.id === key);
-                            if (extra) lines.push(`   - ${extra.name} (x${qty})`);
-                          });
-                          selectedQuoteDetails.customExtras?.forEach((extra: any) => {
-                            lines.push(`   - ${extra.name}`);
-                          });
-                        }
-                        
-                        if (selectedQuoteDetails.extrasQty?.['corporeo'] > 0) {
-                          lines.push(`6. Corpóreo: ${selectedQuoteDetails.extrasQty['corporeo']}m ancho`);
-                        }
-                        
-                        Object.entries(selectedQuoteDetails.extrasQty || {}).forEach(([k, v]) => {
-                          if (k.startsWith('tv') && (v as number) > 0) {
-                            const tv = EXTRAS.find(e => e.id === k);
-                            if (tv) lines.push(`7. TV: ${tv.name.replace('TV ', '')} (x${v})`);
-                          }
-                        });
-                        
-                        lines.push(`8. Luminaria Led.`);
-                        lines.push(`9. Instalación eléctrica: caja con tablero y disyuntor.`);
-                        
-                        navigator.clipboard.writeText(lines.join('\n'));
-                      }}
-                      className="absolute top-2 right-2 p-1.5 bg-white border border-gray-200 rounded shadow-sm opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 hover:text-blue-600"
-                      title="Copiar texto"
-                    >
-                      <Copy className="w-3 h-3" />
-                    </button>
-                  </div>
-                )}
-              </div>
-
               <div>
                 <h4 className="text-xs font-bold text-gray-900 mb-2 uppercase tracking-wider">Desglose</h4>
                 <div className="space-y-2 bg-white border border-gray-200 rounded-lg p-3">
@@ -1559,9 +1440,222 @@ export default function App() {
                 <span className="text-sm font-bold text-blue-900">Total Estimado</span>
                 <span className="text-lg font-bold text-blue-700">{formatCurrency(selectedQuoteDetails.grandTotal)}</span>
               </div>
+
+              <div className="pt-2">
+                <button 
+                  onClick={() => setShowSummaryDropdown(!showSummaryDropdown)}
+                  className="flex items-center justify-between w-full text-left text-xs font-bold text-gray-900 mb-2 uppercase tracking-wider focus:outline-none"
+                >
+                  <span>Producto / Servicio (Resumen)</span>
+                  {showSummaryDropdown ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                </button>
+                
+                {showSummaryDropdown && (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 relative group mb-4">
+                    <p className="text-xs text-gray-800 font-mono leading-relaxed select-all pr-8">
+                      {selectedQuoteDetails.cliente} / STAND: {selectedQuoteDetails.evento} / {selectedQuoteDetails.fechaInicio ? new Date(selectedQuoteDetails.fechaInicio).toLocaleDateString('es-AR') : '-'} al {selectedQuoteDetails.fechaFin ? new Date(selectedQuoteDetails.fechaFin).toLocaleDateString('es-AR') : '-'} / {selectedQuoteDetails.selectedCity}{selectedQuoteDetails.lugarArmado ? ` - ${selectedQuoteDetails.lugarArmado}` : ''} / {selectedQuoteDetails.clientPaymentDays > 0 ? `Pago a ${selectedQuoteDetails.clientPaymentDays} días / ` : ''}{formatCurrency(selectedQuoteDetails.grandTotal)}
+                    </p>
+                    <button 
+                      onClick={() => {
+                        const text = `${selectedQuoteDetails.cliente} / STAND: ${selectedQuoteDetails.evento} / ${selectedQuoteDetails.fechaInicio ? new Date(selectedQuoteDetails.fechaInicio).toLocaleDateString('es-AR') : '-'} al ${selectedQuoteDetails.fechaFin ? new Date(selectedQuoteDetails.fechaFin).toLocaleDateString('es-AR') : '-'} / ${selectedQuoteDetails.selectedCity}${selectedQuoteDetails.lugarArmado ? ` - ${selectedQuoteDetails.lugarArmado}` : ''} / ${selectedQuoteDetails.clientPaymentDays > 0 ? `Pago a ${selectedQuoteDetails.clientPaymentDays} días / ` : ''}${formatCurrency(selectedQuoteDetails.grandTotal)}`;
+                        navigator.clipboard.writeText(text);
+                      }}
+                      className="absolute top-2 right-2 p-1.5 bg-white border border-gray-200 rounded shadow-sm opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 hover:text-blue-600"
+                      title="Copiar texto"
+                    >
+                      <Copy className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <button 
+                  onClick={() => setShowDetailedBreakdown(!showDetailedBreakdown)}
+                  className="flex items-center justify-between w-full text-left text-xs font-bold text-gray-900 mb-2 uppercase tracking-wider focus:outline-none"
+                >
+                  <span>Detalle Técnico</span>
+                  {showDetailedBreakdown ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                </button>
+                
+                {showDetailedBreakdown && (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 relative group mb-4">
+                    <div className="text-xs text-gray-800 font-mono leading-relaxed select-all pr-8 space-y-1">
+                      <p>1. Lote N° {selectedQuoteDetails.lote || '-'} - Medida: {selectedQuoteDetails.standAncho || '-'}x{selectedQuoteDetails.standProfundo || '-'}m ({selectedQuoteDetails.selectedSize}m²)</p>
+                      <p>2. Estructuras de madera pintada.</p>
+                      <p>3. Piso {selectedQuoteDetails.extrasQty?.['piso'] ? 'melamina' : 'alfombra'}.</p>
+                      
+                      {selectedQuoteDetails.graficasList && selectedQuoteDetails.graficasList.length > 0 && (
+                        <div>
+                          <p>4. Gráficas:</p>
+                          <ul className="pl-4">
+                            {selectedQuoteDetails.graficasList.map((g: any, idx: number) => (
+                              <li key={idx}>- {g.ancho}x{g.alto}m</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      
+                      {((selectedQuoteDetails.extrasQty && Object.keys(selectedQuoteDetails.extrasQty).filter(k => k !== 'piso' && k !== 'alfombra' && k !== 'corporeo' && !k.startsWith('tv')).length > 0) || (selectedQuoteDetails.customExtras && selectedQuoteDetails.customExtras.length > 0)) && (
+                        <div>
+                          <p>5. Adicionales:</p>
+                          <ul className="pl-4">
+                            {Object.entries(selectedQuoteDetails.extrasQty || {}).map(([key, qty]) => {
+                              if (key === 'piso' || key === 'alfombra' || key === 'corporeo' || key.startsWith('tv') || !qty) return null;
+                              const extra = EXTRAS.find(e => e.id === key);
+                              return extra ? <li key={key}>- {extra.name} (x{qty as number})</li> : null;
+                            })}
+                            {selectedQuoteDetails.customExtras?.map((extra: any, idx: number) => (
+                              <li key={`custom-${idx}`}>- {extra.name}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      
+                      {selectedQuoteDetails.extrasQty?.['corporeo'] > 0 && (
+                        <p>6. Corpóreo: {selectedQuoteDetails.extrasQty['corporeo'] as number}m ancho</p>
+                      )}
+                      
+                      {Object.entries(selectedQuoteDetails.extrasQty || {}).filter(([k, v]) => k.startsWith('tv') && (v as number) > 0).map(([k, v]) => {
+                        const tv = EXTRAS.find(e => e.id === k);
+                        return tv ? <p key={k}>7. TV: {tv.name.replace('TV ', '')} (x{v as number})</p> : null;
+                      })}
+                      
+                      <p>8. Luminaria Led.</p>
+                      <p>9. Instalación eléctrica: caja con tablero y disyuntor.</p>
+                    </div>
+                    
+                    <button 
+                      onClick={() => {
+                        const lines = [
+                          `1. Lote N° ${selectedQuoteDetails.lote || '-'} - Medida: ${selectedQuoteDetails.standAncho || '-'}x${selectedQuoteDetails.standProfundo || '-'}m (${selectedQuoteDetails.selectedSize}m²)`,
+                          `2. Estructuras de madera pintada.`,
+                          `3. Piso ${selectedQuoteDetails.extrasQty?.['piso'] ? 'melamina' : 'alfombra'}.`
+                        ];
+                        
+                        if (selectedQuoteDetails.graficasList && selectedQuoteDetails.graficasList.length > 0) {
+                          lines.push(`4. Gráficas:`);
+                          selectedQuoteDetails.graficasList.forEach((g: any) => {
+                            lines.push(`   - ${g.ancho}x${g.alto}m`);
+                          });
+                        }
+                        
+                        const hasOtherExtras = (selectedQuoteDetails.extrasQty && Object.keys(selectedQuoteDetails.extrasQty).filter(k => k !== 'piso' && k !== 'alfombra' && k !== 'corporeo' && !k.startsWith('tv')).length > 0) || (selectedQuoteDetails.customExtras && selectedQuoteDetails.customExtras.length > 0);
+                        if (hasOtherExtras) {
+                          lines.push(`5. Adicionales:`);
+                          Object.entries(selectedQuoteDetails.extrasQty || {}).forEach(([key, qty]) => {
+                            if (key === 'piso' || key === 'alfombra' || key === 'corporeo' || key.startsWith('tv') || !qty) return;
+                            const extra = EXTRAS.find(e => e.id === key);
+                            if (extra) lines.push(`   - ${extra.name} (x{qty})`);
+                          });
+                          selectedQuoteDetails.customExtras?.forEach((extra: any) => {
+                            lines.push(`   - ${extra.name}`);
+                          });
+                        }
+                        
+                        if (selectedQuoteDetails.extrasQty?.['corporeo'] > 0) {
+                          lines.push(`6. Corpóreo: ${selectedQuoteDetails.extrasQty['corporeo']}m ancho`);
+                        }
+                        
+                        Object.entries(selectedQuoteDetails.extrasQty || {}).forEach(([k, v]) => {
+                          if (k.startsWith('tv') && (v as number) > 0) {
+                            const tv = EXTRAS.find(e => e.id === k);
+                            if (tv) lines.push(`7. TV: ${tv.name.replace('TV ', '')} (x{v})`);
+                          }
+                        });
+                        
+                        lines.push(`8. Luminaria Led.`);
+                        lines.push(`9. Instalación eléctrica: caja con tablero y disyuntor.`);
+                        
+                        navigator.clipboard.writeText(lines.join('\n'));
+                      }}
+                      className="absolute top-2 right-2 p-1.5 bg-white border border-gray-200 rounded shadow-sm opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 hover:text-blue-600"
+                      title="Copiar texto"
+                    >
+                      <Copy className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="mt-4 pt-3 border-t border-gray-100 flex justify-end gap-2 shrink-0">
+              <button 
+                onClick={() => {
+                  const details = selectedQuoteDetails;
+                  const formatDate = (date: any) => date ? new Date(date).toLocaleDateString('es-AR') : '-';
+                  
+                  let message = `*PRESUPUESTO ESTIMADO*\n\n`;
+                  message += `*Cliente:* ${details.cliente}${details.cuit ? ` (CUIT: ${details.cuit})` : ''}\n`;
+                  message += `*Evento:* ${details.evento}\n`;
+                  message += `*Fechas:* ${formatDate(details.fechaInicio)} al ${formatDate(details.fechaFin)}\n`;
+                  message += `*Ubicación:* ${details.selectedCity}${details.lugarArmado ? ` - ${details.lugarArmado}` : ''}\n`;
+                  message += `*Tamaño:* ${details.selectedSize} m²\n\n`;
+                  
+                  message += `*DESGLOSE:*\n`;
+                  message += `- Stand Base: ${formatCurrency(details.basePrice)}\n`;
+                  if (details.selectedCity !== 'Cap.Fed') {
+                    message += `- Flete: ${formatCurrency(details.freightPrice)}\n`;
+                  }
+                  
+                  // Adicionales
+                  const hasExtras = (details.extrasQty && Object.values(details.extrasQty).some(v => (v as number) > 0)) || 
+                                   (details.customExtras && details.customExtras.length > 0) || 
+                                   (details.graficasList && details.graficasList.length > 0);
+                  
+                  if (hasExtras) {
+                    message += `\n*Adicionales:*\n`;
+                    
+                    // Gráficas
+                    if (details.graficasList && details.graficasList.length > 0) {
+                      const totalArea = details.graficasList.reduce((acc: number, g: any) => acc + (g.ancho * g.alto), 0);
+                      const extraDef = EXTRAS.find(e => e.id === 'grafica');
+                      if (extraDef) {
+                        const extraPrice = extraDef.price * (1 + (details.ipcValue || 0) / 100) * totalArea;
+                        message += `• ${extraDef.name} (${totalArea.toFixed(2)} m²): ${formatCurrency(extraPrice)}\n`;
+                      }
+                    }
+                    
+                    // Extras predefinidos
+                    Object.entries(details.extrasQty || {}).forEach(([extraId, qty]) => {
+                      if ((qty as number) <= 0) return;
+                      const extraDef = EXTRAS.find(e => e.id === extraId);
+                      if (!extraDef) return;
+                      
+                      let extraPrice = extraDef.price * (1 + (details.ipcValue || 0) / 100) * (qty as number);
+                      if (extraId.startsWith('tv')) {
+                         let eventDays = 1;
+                         if (details.fechaInicio && details.fechaFin) {
+                           const start = new Date(details.fechaInicio);
+                           const end = new Date(details.fechaFin);
+                           const diffTime = Math.abs(end.getTime() - start.getTime());
+                           const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                           eventDays = diffDays + 1;
+                         }
+                         extraPrice *= eventDays;
+                      }
+                      message += `• ${extraDef.name} (x${qty}): ${formatCurrency(extraPrice)}\n`;
+                    });
+                    
+                    // Extras personalizados
+                    details.customExtras?.forEach((extra: any) => {
+                      message += `• ${extra.name}: ${formatCurrency(extra.price)}\n`;
+                    });
+                  }
+                  
+                  if (details.clientPaymentDays > 0) {
+                    message += `\n*Recargo Financiero:* ${formatCurrency(details.financialSurchargeAmount)} (${details.clientPaymentDays} días)\n`;
+                  }
+                  
+                  message += `\n*TOTAL ESTIMADO: ${formatCurrency(details.grandTotal)}*`;
+                  
+                  const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+                  window.open(whatsappUrl, '_blank');
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-md transition-colors"
+              >
+                <Share2 className="w-4 h-4" /> COMPARTIR
+              </button>
               <button 
                 onClick={() => {
                   handleEdit(selectedQuoteDetails);
