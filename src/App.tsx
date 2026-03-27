@@ -110,7 +110,8 @@ const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('es-AR', {
     style: 'currency',
     currency: 'ARS',
-    maximumFractionDigits: 0
+    minimumFractionDigits: amount % 1 === 0 ? 0 : 2,
+    maximumFractionDigits: 2
   }).format(amount);
 };
 
@@ -148,7 +149,7 @@ export default function App() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [expandedClient, setExpandedClient] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [sueValue, setSueValue] = useState<number>(1800000);
+  const [sueValue, setSueValue] = useState<number>(2137242.96);
   const [showSueModal, setShowSueModal] = useState(false);
   const [suePassword, setSuePassword] = useState('');
   const [isSueUnlocked, setIsSueUnlocked] = useState(false);
@@ -202,22 +203,16 @@ export default function App() {
           
           setIpcData({ month: capitalizedMonth, value: latest.valor, multiplier, loading: false });
           
-          // Calculate accumulated inflation since last August for Sue value
-          let lastAugustIndex = -1;
-          for (let i = data.length - 1; i >= 0; i--) {
-            if (data[i].fecha.includes('-08-')) {
-              lastAugustIndex = i;
-              break;
+          // The user provided a fixed value for today: $1.068.621,48 (quincena) -> $2.137.242,96 (mensual)
+          // This value will update when a NEW IPC datum is available (newer than the current latest)
+          const latestDate = data[data.length - 1].fecha;
+          let accumulatedSue = 1;
+          for (let i = 0; i < data.length; i++) {
+            if (data[i].fecha > latestDate) {
+              accumulatedSue *= (1 + data[i].valor / 100);
             }
           }
-          
-          let accumulated = 1;
-          if (lastAugustIndex !== -1) {
-            for (let i = lastAugustIndex + 1; i < data.length; i++) {
-              accumulated *= (1 + data[i].valor / 100);
-            }
-          }
-          setSueValue(1800000 * accumulated);
+          setSueValue(2137242.96 * accumulatedSue);
         } else {
           setIpcData(prev => ({ ...prev, loading: false }));
         }
@@ -1090,7 +1085,7 @@ export default function App() {
               setIsSueUnlocked(false);
               setSuePassword('');
             }}
-            className="text-[6px] text-gray-300 hover:text-gray-400 font-medium bg-transparent hover:bg-gray-100/30 px-1 py-0.5 rounded cursor-pointer transition-colors opacity-50 hover:opacity-100"
+            className="text-xs text-gray-300 hover:text-gray-400 font-medium bg-transparent hover:bg-gray-100/30 px-1 py-0.5 rounded cursor-pointer transition-colors opacity-50 hover:opacity-100"
           >
             Sue: {formatCurrency(sueValue / 2)}
           </button>
