@@ -114,6 +114,7 @@ const formatCurrency = (amount: number) => {
 
 export default function App() {
   const [cliente, setCliente] = useState<string>('');
+  const [cuit, setCuit] = useState<string>('');
   const [evento, setEvento] = useState<string>('');
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
@@ -130,6 +131,11 @@ export default function App() {
   const [ipcData, setIpcData] = useState<{ month: string, value: number, loading: boolean }>({ month: '', value: 0, loading: true });
   
   const [savedQuotes, setSavedQuotes] = useState<any[]>([]);
+  const [clientsList, setClientsList] = useState<any[]>([]);
+  const [showAddClientModal, setShowAddClientModal] = useState(false);
+  const [newClientName, setNewClientName] = useState('');
+  const [newClientCuit, setNewClientCuit] = useState('');
+  
   const [isSaving, setIsSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -217,6 +223,26 @@ export default function App() {
     });
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, 'clients'), (snapshot) => {
+      const clients = snapshot.docs.map(doc => ({ id: doc.id, ...(doc.data() as any) }));
+      setClientsList(clients);
+    }, (error) => {
+      console.error("Error fetching clients:", error);
+      handleFirestoreError(error, OperationType.LIST, 'clients');
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (cliente) {
+      const found = clientsList.find(c => c.name.toLowerCase() === cliente.toLowerCase());
+      if (found && !cuit) {
+        setCuit(found.cuit || '');
+      }
+    }
+  }, [cliente, clientsList]);
 
   const handleExtraChange = (id: string, delta: number) => {
     setExtrasQty(prev => {
@@ -311,6 +337,7 @@ export default function App() {
     try {
       const quoteData = {
         cliente,
+        cuit,
         evento,
         fechaInicio: startDate ? startDate.toISOString() : '',
         fechaFin: endDate ? endDate.toISOString() : '',
@@ -350,6 +377,7 @@ export default function App() {
       
       // Reset form
       setCliente('');
+      setCuit('');
       setEvento('');
       setStartDate(null);
       setEndDate(null);
@@ -370,6 +398,7 @@ export default function App() {
   const handleEdit = (quote: any) => {
     setEditingId(quote.id);
     setCliente(quote.cliente || '');
+    setCuit(quote.cuit || '');
     setEvento(quote.evento || '');
     setStartDate(quote.fechaInicio ? new Date(quote.fechaInicio) : null);
     setEndDate(quote.fechaFin ? new Date(quote.fechaFin) : null);
@@ -396,6 +425,7 @@ export default function App() {
   const cancelEdit = () => {
     setEditingId(null);
     setCliente('');
+    setCuit('');
     setEvento('');
     setStartDate(null);
     setEndDate(null);
@@ -463,17 +493,44 @@ export default function App() {
             <section className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
               <div className="p-2 sm:p-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div className="space-y-1">
-                  <label htmlFor="cliente" className="block text-[10px] sm:text-xs font-medium text-gray-700">Cliente</label>
+                  <div className="flex justify-between items-center">
+                    <label htmlFor="cliente" className="block text-[10px] sm:text-xs font-medium text-gray-700">Cliente</label>
+                    <button 
+                      onClick={() => setShowAddClientModal(true)}
+                      className="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-0.5"
+                    >
+                      <Plus className="w-3 h-3" /> Nuevo Cliente
+                    </button>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      id="cliente"
+                      value={cliente}
+                      onChange={(e) => setCliente(e.target.value)}
+                      placeholder="Nombre del cliente"
+                      className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-50 py-1.5 px-2 text-xs border"
+                      list="clients-list"
+                    />
+                    <datalist id="clients-list">
+                      {clientsList.map(c => (
+                        <option key={c.id} value={c.name} />
+                      ))}
+                    </datalist>
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label htmlFor="cuit" className="block text-[10px] sm:text-xs font-medium text-gray-700">CUIT</label>
                   <input
                     type="text"
-                    id="cliente"
-                    value={cliente}
-                    onChange={(e) => setCliente(e.target.value)}
-                    placeholder="Nombre"
+                    id="cuit"
+                    value={cuit}
+                    onChange={(e) => setCuit(e.target.value)}
+                    placeholder="CUIT del cliente"
                     className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-50 py-1.5 px-2 text-xs border"
                   />
                 </div>
-                <div className="space-y-1">
+                <div className="space-y-1 sm:col-span-2">
                   <label htmlFor="evento" className="block text-[10px] sm:text-xs font-medium text-gray-700">Evento</label>
                   <input
                     type="text"
@@ -1029,6 +1086,69 @@ export default function App() {
         </div>
       )}
 
+      {/* Add Client Modal */}
+      {showAddClientModal && (
+        <div 
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowAddClientModal(false); }}
+        >
+          <div className="bg-white rounded-lg shadow-xl max-w-sm w-full p-4 sm:p-5 overflow-hidden animate-in fade-in zoom-in duration-200 relative">
+            <button 
+              onClick={() => setShowAddClientModal(false)}
+              className="absolute top-2 right-2 p-1.5 text-gray-400 hover:text-gray-600 rounded-full transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <h3 className="text-lg font-bold text-gray-900 mb-4">Nuevo Cliente</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Nombre</label>
+                <input 
+                  type="text"
+                  value={newClientName}
+                  onChange={(e) => setNewClientName(e.target.value)}
+                  className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-50 py-2 px-3 text-sm border"
+                  placeholder="Nombre del cliente"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">CUIT</label>
+                <input 
+                  type="text"
+                  value={newClientCuit}
+                  onChange={(e) => setNewClientCuit(e.target.value)}
+                  className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-50 py-2 px-3 text-sm border"
+                  placeholder="CUIT (opcional)"
+                />
+              </div>
+              <button 
+                onClick={async () => {
+                  if (!newClientName) return;
+                  try {
+                    await addDoc(collection(db, 'clients'), {
+                      name: newClientName,
+                      cuit: newClientCuit,
+                      createdAt: serverTimestamp()
+                    });
+                    setCliente(newClientName);
+                    setCuit(newClientCuit);
+                    setShowAddClientModal(false);
+                    setNewClientName('');
+                    setNewClientCuit('');
+                  } catch (error) {
+                    console.error("Error adding client", error);
+                    handleFirestoreError(error, OperationType.CREATE, 'clients');
+                  }
+                }}
+                className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium transition-colors mt-2"
+              >
+                Guardar Cliente
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Quote Details Modal */}
       {selectedQuoteDetails && (
         <div 
@@ -1059,7 +1179,10 @@ export default function App() {
               <div className="grid grid-cols-2 gap-3 bg-gray-50 p-3 rounded-lg border border-gray-100">
                 <div className="col-span-2 sm:col-span-1">
                   <p className="text-[10px] text-gray-500 uppercase font-semibold tracking-wider">Cliente</p>
-                  <p className="text-xs font-medium text-gray-900 mt-0.5">{selectedQuoteDetails.cliente}</p>
+                  <p className="text-xs font-medium text-gray-900 mt-0.5">
+                    {selectedQuoteDetails.cliente}
+                    {selectedQuoteDetails.cuit ? ` (CUIT: ${selectedQuoteDetails.cuit})` : ''}
+                  </p>
                 </div>
                 <div className="col-span-2 sm:col-span-1">
                   <p className="text-[10px] text-gray-500 uppercase font-semibold tracking-wider">Evento</p>

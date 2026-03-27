@@ -79,5 +79,8 @@ service cloud.firestore {
     match /quotes/{quoteId} {
       allow read, write: if true;
     }
+    match /clients/{clientId} {
+      allow read, write: if true;
+    }
   }
 }
