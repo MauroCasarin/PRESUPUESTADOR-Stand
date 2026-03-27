@@ -182,12 +182,11 @@ export default function App() {
           const monthName = date.toLocaleString('es-AR', { month: 'long', timeZone: 'UTC' });
           const capitalizedMonth = monthName.charAt(0).toUpperCase() + monthName.slice(1);
           
-          // Calculate accumulated inflation since March 2026
-          // The base prices are for March 2026, so we only apply inflation from March 2026 onwards.
-          // In Argentina, March inflation is published in April.
+          // Calculate accumulated inflation since February 2026
+          // The user wants to add February IPC to the March base prices.
           let multiplier = 1;
           for (let i = 0; i < data.length; i++) {
-            if (data[i].fecha >= '2026-03-01') {
+            if (data[i].fecha >= '2026-02-01') {
               multiplier *= (1 + data[i].valor / 100);
             }
           }
@@ -316,7 +315,7 @@ export default function App() {
     return (ancho * profundo).toString();
   }, [standAncho, standProfundo]);
 
-  const ipcMultiplier = ipcData.multiplier;
+  const ipcMultiplier = ipcData.multiplier * 1.0375;
 
   const cityData = useMemo(() => CITIES.find(c => c.name === selectedCity) || CITIES[0], [selectedCity]);
   
