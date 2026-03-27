@@ -19,13 +19,40 @@ import {
   Trash2,
   ChevronDown,
   ChevronRight,
-  X
+  X,
+  LogOut,
+  LogIn
 } from 'lucide-react';
 import { db } from './firebase';
-import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp, getDocFromServer } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
 
 registerLocale('es', es);
+
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
 
 // --- DATA EXTRACTED FROM EXCEL ---
 const BASE_PRICES = {
@@ -94,8 +121,12 @@ export default function App() {
   const [newCustomExtraName, setNewCustomExtraName] = useState('');
   const [newCustomExtraPrice, setNewCustomExtraPrice] = useState('');
   const [selectedCity, setSelectedCity] = useState<string>(CITIES[0].name);
+  const [lugarArmado, setLugarArmado] = useState<string>('');
   const [selectedSize, setSelectedSize] = useState<string>("4");
   const [extrasQty, setExtrasQty] = useState<Record<string, number>>({});
+  const [graficasList, setGraficasList] = useState<{ id: string, ancho: number, alto: number }[]>([]);
+  const [newGraficaAncho, setNewGraficaAncho] = useState('');
+  const [newGraficaAlto, setNewGraficaAlto] = useState('');
   const [ipcData, setIpcData] = useState<{ month: string, value: number, loading: boolean }>({ month: '', value: 0, loading: true });
   
   const [savedQuotes, setSavedQuotes] = useState<any[]>([]);
@@ -114,6 +145,19 @@ export default function App() {
 
   const currentMonthName = new Date().toLocaleString('es-AR', { month: 'long' });
   const capitalizedCurrentMonth = currentMonthName.charAt(0).toUpperCase() + currentMonthName.slice(1);
+
+  useEffect(() => {
+    async function testConnection() {
+      try {
+        await getDocFromServer(doc(db, 'test', 'connection'));
+      } catch (error) {
+        if(error instanceof Error && error.message.includes('the client is offline')) {
+          console.error("Please check your Firebase configuration. ");
+        }
+      }
+    }
+    testConnection();
+  }, []);
 
   useEffect(() => {
     fetch('https://api.argentinadatos.com/v1/finanzas/indices/inflacion')
@@ -169,6 +213,7 @@ export default function App() {
       setSavedQuotes(quotes);
     }, (error) => {
       console.error("Error fetching quotes:", error);
+      handleFirestoreError(error, OperationType.LIST, 'quotes');
     });
     return () => unsubscribe();
   }, []);
@@ -201,6 +246,20 @@ export default function App() {
     }
   };
 
+  const handleAddGrafica = () => {
+    const ancho = parseFloat(newGraficaAncho);
+    const alto = parseFloat(newGraficaAlto);
+    if (!isNaN(ancho) && !isNaN(alto) && ancho > 0 && alto > 0) {
+      setGraficasList(prev => [...prev, { id: `g-${Date.now()}`, ancho, alto }]);
+      setNewGraficaAncho('');
+      setNewGraficaAlto('');
+    }
+  };
+
+  const handleRemoveGrafica = (id: string) => {
+    setGraficasList(prev => prev.filter(g => g.id !== id));
+  };
+
   // --- CALCULATIONS ---
   const ipcMultiplier = 1 + (ipcData.value / 100);
 
@@ -218,7 +277,12 @@ export default function App() {
 
   const extrasTotal = useMemo(() => {
     const standardExtras = EXTRAS.reduce((total, extra) => {
-      const qty = extrasQty[extra.id] || 0;
+      let qty = 0;
+      if (extra.id === 'grafica') {
+        qty = graficasList.reduce((sum, g) => sum + (g.ancho * g.alto), 0);
+      } else {
+        qty = extrasQty[extra.id] || 0;
+      }
       let extraPrice = extra.price * ipcMultiplier * qty;
       if (extra.id.startsWith('tv')) {
         extraPrice *= eventDays;
@@ -229,7 +293,7 @@ export default function App() {
     const customExtrasTotal = customExtras.reduce((total, extra) => total + extra.price, 0);
     
     return standardExtras + customExtrasTotal;
-  }, [extrasQty, customExtras, ipcMultiplier, eventDays]);
+  }, [extrasQty, customExtras, graficasList, ipcMultiplier, eventDays]);
 
   const grandTotal = basePrice + freightPrice + extrasTotal;
 
@@ -251,8 +315,10 @@ export default function App() {
         fechaInicio: startDate ? startDate.toISOString() : '',
         fechaFin: endDate ? endDate.toISOString() : '',
         selectedCity,
+        lugarArmado,
         selectedSize,
         extrasQty,
+        graficasList,
         customExtras,
         ipcMonth: ipcData.month || capitalizedCurrentMonth,
         ipcValue: ipcData.value,
@@ -263,14 +329,22 @@ export default function App() {
       };
 
       if (editingId) {
-        await updateDoc(doc(db, 'quotes', editingId), quoteData);
+        try {
+          await updateDoc(doc(db, 'quotes', editingId), quoteData);
+        } catch (error) {
+          handleFirestoreError(error, OperationType.UPDATE, `quotes/${editingId}`);
+        }
         alert("Presupuesto actualizado exitosamente.");
         setEditingId(null);
       } else {
-        await addDoc(collection(db, 'quotes'), {
-          ...quoteData,
-          createdAt: serverTimestamp()
-        });
+        try {
+          await addDoc(collection(db, 'quotes'), {
+            ...quoteData,
+            createdAt: serverTimestamp()
+          });
+        } catch (error) {
+          handleFirestoreError(error, OperationType.CREATE, 'quotes');
+        }
         alert("Presupuesto guardado exitosamente.");
       }
       
@@ -280,8 +354,10 @@ export default function App() {
       setStartDate(null);
       setEndDate(null);
       setSelectedCity(CITIES[0].name);
+      setLugarArmado('');
       setSelectedSize("4");
       setExtrasQty({});
+      setGraficasList([]);
       setCustomExtras([]);
     } catch (error) {
       console.error("Error saving quote", error);
@@ -298,8 +374,10 @@ export default function App() {
     setStartDate(quote.fechaInicio ? new Date(quote.fechaInicio) : null);
     setEndDate(quote.fechaFin ? new Date(quote.fechaFin) : null);
     setSelectedCity(quote.selectedCity || CITIES[0].name);
+    setLugarArmado(quote.lugarArmado || '');
     setSelectedSize(quote.selectedSize || "4");
     setExtrasQty(quote.extrasQty || {});
+    setGraficasList(quote.graficasList || []);
     setCustomExtras(quote.customExtras || []);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -311,6 +389,7 @@ export default function App() {
       setDeleteConfirmId(null);
     } catch (error) {
       console.error("Error deleting quote", error);
+      handleFirestoreError(error, OperationType.DELETE, `quotes/${deleteConfirmId}`);
     }
   };
 
@@ -321,8 +400,10 @@ export default function App() {
     setStartDate(null);
     setEndDate(null);
     setSelectedCity(CITIES[0].name);
+    setLugarArmado('');
     setSelectedSize("4");
     setExtrasQty({});
+    setGraficasList([]);
     setCustomExtras([]);
   };
 
@@ -433,7 +514,7 @@ export default function App() {
                   Ubicación y Tamaño
                 </h2>
               </div>
-              <div className="p-2 sm:p-3 grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
+              <div className="p-2 sm:p-3 grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
                 {/* City Selection */}
                 <div className="space-y-1">
                   <label htmlFor="city" className="block text-[10px] sm:text-xs font-medium text-gray-700">
@@ -451,6 +532,21 @@ export default function App() {
                       </option>
                     ))}
                   </select>
+                </div>
+
+                {/* Lugar de Armado */}
+                <div className="space-y-1">
+                  <label htmlFor="lugarArmado" className="block text-[10px] sm:text-xs font-medium text-gray-700">
+                    Lugar de Armado
+                  </label>
+                  <input
+                    type="text"
+                    id="lugarArmado"
+                    value={lugarArmado}
+                    onChange={(e) => setLugarArmado(e.target.value)}
+                    placeholder="Ej. Predio Ferial, Salón..."
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-50 py-1.5 px-2 text-xs border"
+                  />
                 </div>
 
                 {/* Size Selection */}
@@ -488,6 +584,76 @@ export default function App() {
               <div className="divide-y divide-gray-100">
                 {EXTRAS.map(extra => {
                   const Icon = extra.icon;
+                  
+                  if (extra.id === 'grafica') {
+                    const totalM2 = graficasList.reduce((sum, g) => sum + (g.ancho * g.alto), 0);
+                    return (
+                      <div key={extra.id} className="p-1.5 sm:p-2 flex flex-col gap-2 hover:bg-gray-50/50 transition-colors">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <div className="bg-blue-100 p-1.5 rounded-md text-blue-700 shrink-0">
+                              <Icon className="w-3.5 h-3.5" />
+                            </div>
+                            <div className="truncate">
+                              <h3 className="text-[11px] sm:text-xs font-medium text-gray-900 truncate">{extra.name}</h3>
+                              <p className="text-[9px] sm:text-[10px] text-gray-500 truncate">
+                                {formatCurrency(extra.price * ipcMultiplier)}/{extra.unit} {totalM2 > 0 && `(Total: ${totalM2.toFixed(2)} m²)`}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="w-16 sm:w-20 text-right shrink-0">
+                            <span className="text-[11px] sm:text-xs font-medium text-gray-900">
+                              {totalM2 > 0 ? formatCurrency(totalM2 * extra.price * ipcMultiplier) : '-'}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        {/* List of graficas */}
+                        {graficasList.length > 0 && (
+                          <div className="pl-9 pr-2 space-y-1">
+                            {graficasList.map(g => (
+                              <div key={g.id} className="flex justify-between items-center text-[10px] sm:text-xs bg-white border border-gray-100 p-1 rounded">
+                                <span className="text-gray-600">{g.ancho}m x {g.alto}m = {(g.ancho * g.alto).toFixed(2)} m²</span>
+                                <button onClick={() => handleRemoveGrafica(g.id)} className="text-red-500 hover:text-red-700 p-0.5">
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        
+                        {/* Add new grafica */}
+                        <div className="pl-9 pr-2 flex items-center gap-1.5">
+                          <input 
+                            type="number" 
+                            step="0.01"
+                            placeholder="Ancho" 
+                            value={newGraficaAncho}
+                            onChange={e => setNewGraficaAncho(e.target.value)}
+                            className="w-16 sm:w-20 rounded border-gray-300 text-[10px] sm:text-xs p-1"
+                          />
+                          <span className="text-gray-400 text-xs">x</span>
+                          <input 
+                            type="number" 
+                            step="0.01"
+                            placeholder="Alto" 
+                            value={newGraficaAlto}
+                            onChange={e => setNewGraficaAlto(e.target.value)}
+                            className="w-16 sm:w-20 rounded border-gray-300 text-[10px] sm:text-xs p-1"
+                          />
+                          <span className="text-gray-400 text-xs">m</span>
+                          <button 
+                            onClick={handleAddGrafica}
+                            disabled={!newGraficaAncho || !newGraficaAlto}
+                            className="ml-auto bg-blue-100 text-blue-700 hover:bg-blue-200 p-1 rounded disabled:opacity-50 transition-colors"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+
                   const qty = extrasQty[extra.id] || 0;
                   return (
                     <div key={extra.id} className="p-1.5 sm:p-2 flex items-center justify-between gap-2 hover:bg-gray-50/50 transition-colors">
@@ -698,7 +864,7 @@ export default function App() {
                                   <h3 className="text-[11px] sm:text-xs font-medium text-gray-900 truncate">{quote.evento}</h3>
                                 </div>
                                 <p className="text-[9px] sm:text-[10px] text-gray-500 truncate mt-0.5">
-                                  {quote.selectedCity} • {quote.selectedSize}m²
+                                  {quote.selectedCity} {quote.lugarArmado ? `(${quote.lugarArmado})` : ''} • {quote.selectedSize}m²
                                 </p>
                                 {(quote.fechaInicio || quote.fechaFin) && (
                                   <p className="text-[9px] sm:text-[10px] text-gray-500 truncate mt-0.5">

@@ -58,23 +58,18 @@ service cloud.firestore {
     // ===============================================================
     
     function isValidQuote() {
-      return hasRequiredFields(['cliente', 'evento', 'selectedCity', 'selectedSize', 'extrasQty', 'ipcMonth', 'ipcValue', 'basePrice', 'freightPrice', 'extrasTotal', 'grandTotal']) &&
-             hasOnlyAllowedFields(['cliente', 'evento', 'fechaInicio', 'fechaFin', 'selectedCity', 'selectedSize', 'extrasQty', 'customExtras', 'ipcMonth', 'ipcValue', 'basePrice', 'freightPrice', 'extrasTotal', 'grandTotal', 'createdAt']) &&
-             validStringLength('cliente', 1, 200) &&
-             validStringLength('evento', 1, 200) &&
-             (!('fechaInicio' in request.resource.data) || validStringLength('fechaInicio', 0, 30)) &&
-             (!('fechaFin' in request.resource.data) || validStringLength('fechaFin', 0, 30)) &&
-             validStringLength('selectedCity', 1, 100) &&
-             validStringLength('selectedSize', 1, 10) &&
-             request.resource.data.extrasQty is map &&
-             (!('customExtras' in request.resource.data) || request.resource.data.customExtras is list) &&
-             validStringLength('ipcMonth', 1, 50) &&
-             request.resource.data.ipcValue is number && request.resource.data.ipcValue >= 0 &&
-             request.resource.data.basePrice is number && request.resource.data.basePrice >= 0 &&
-             request.resource.data.freightPrice is number && request.resource.data.freightPrice >= 0 &&
-             request.resource.data.extrasTotal is number && request.resource.data.extrasTotal >= 0 &&
-             request.resource.data.grandTotal is number && request.resource.data.grandTotal >= 0 &&
-             (!('createdAt' in request.resource.data) || request.resource.data.createdAt is timestamp);
+      let d = request.resource.data;
+      return d.keys().hasAll(['cliente', 'evento', 'selectedCity', 'selectedSize', 'ipcMonth', 'ipcValue', 'basePrice', 'freightPrice', 'extrasTotal', 'grandTotal']) &&
+             d.cliente is string && d.cliente.size() > 0 && d.cliente.size() <= 200 &&
+             d.evento is string && d.evento.size() > 0 && d.evento.size() <= 200 &&
+             d.selectedCity is string && d.selectedCity.size() <= 100 &&
+             d.selectedSize is string && d.selectedSize.size() <= 10 &&
+             d.ipcMonth is string && d.ipcMonth.size() <= 50 &&
+             d.ipcValue is number &&
+             d.basePrice is number &&
+             d.freightPrice is number &&
+             d.extrasTotal is number &&
+             d.grandTotal is number;
     }
 
     // ===============================================================
@@ -82,7 +77,6 @@ service cloud.firestore {
     // ===============================================================
     
     match /quotes/{quoteId} {
-      // Allow public read and write as requested
       allow read: if true;
       allow create: if isValidQuote();
       allow update: if isValidQuote() && areImmutableFieldsUnchanged(['createdAt']);
