@@ -96,12 +96,12 @@ type ExtraItem = {
 
 const EXTRAS: ExtraItem[] = [
   { id: 'grafica', name: 'Gráfica en MDF', price: 62476, unit: 'm²', icon: ImageIcon },
-  { id: 'corporeo', name: 'Corpóreo', price: 121000, unit: 'm lineal', icon: Layers },
-  { id: 'piso', name: 'Piso melamina', price: 64130, unit: 'm²', icon: Layers },
-  { id: 'alfombra', name: 'Alfombra', price: 25300, unit: 'm²', icon: Layers },
-  { id: 'tv42', name: 'TV 42"', price: 126000, unit: 'días', icon: MonitorPlay },
-  { id: 'tv50', name: 'TV 50"', price: 182000, unit: 'días', icon: MonitorPlay },
-  { id: 'tv70', name: 'TV 70"', price: 242000, unit: 'días', icon: MonitorPlay }
+  { id: 'corporeo', name: 'Corpóreo', price: 124509, unit: 'm lineal', icon: Layers },
+  { id: 'piso', name: 'Piso melamina', price: 65990, unit: 'm²', icon: Layers },
+  { id: 'alfombra', name: 'Alfombra', price: 26034, unit: 'm²', icon: Layers },
+  { id: 'tv42', name: 'TV 42"', price: 129654, unit: 'días', icon: MonitorPlay },
+  { id: 'tv50', name: 'TV 50"', price: 187278, unit: 'días', icon: MonitorPlay },
+  { id: 'tv70', name: 'TV 70"', price: 249018, unit: 'días', icon: MonitorPlay }
 ];
 
 // --- UTILS ---
