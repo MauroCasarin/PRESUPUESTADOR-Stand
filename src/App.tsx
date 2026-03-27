@@ -124,7 +124,9 @@ export default function App() {
   const [newCustomExtraPrice, setNewCustomExtraPrice] = useState('');
   const [selectedCity, setSelectedCity] = useState<string>(CITIES[0].name);
   const [lugarArmado, setLugarArmado] = useState<string>('');
-  const [selectedSize, setSelectedSize] = useState<string>("4");
+  const [lote, setLote] = useState<string>('');
+  const [standAncho, setStandAncho] = useState<string>('2');
+  const [standProfundo, setStandProfundo] = useState<string>('2');
   const [extrasQty, setExtrasQty] = useState<Record<string, number>>({});
   const [graficasList, setGraficasList] = useState<{ id: string, ancho: number, alto: number }[]>([]);
   const [newGraficaAncho, setNewGraficaAncho] = useState('');
@@ -147,6 +149,7 @@ export default function App() {
   const [suePassword, setSuePassword] = useState('');
   const [isSueUnlocked, setIsSueUnlocked] = useState(false);
   const [selectedQuoteDetails, setSelectedQuoteDetails] = useState<any | null>(null);
+  const [showDetailedBreakdown, setShowDetailedBreakdown] = useState(false);
   
   const [showTerminarModal, setShowTerminarModal] = useState(false);
 
@@ -288,11 +291,27 @@ export default function App() {
   };
 
   // --- CALCULATIONS ---
+  const selectedSize = useMemo(() => {
+    const ancho = parseFloat(standAncho) || 0;
+    const profundo = parseFloat(standProfundo) || 0;
+    return (ancho * profundo).toString();
+  }, [standAncho, standProfundo]);
+
   const ipcMultiplier = 1 + (ipcData.value / 100);
 
   const cityData = useMemo(() => CITIES.find(c => c.name === selectedCity) || CITIES[0], [selectedCity]);
   
-  const basePrice = (BASE_PRICES[selectedSize as keyof typeof BASE_PRICES] || 0) * ipcMultiplier;
+  const basePrice = useMemo(() => {
+    const m2 = parseFloat(selectedSize) || 0;
+    let price = 0;
+    if (m2 <= 4) price = BASE_PRICES["4"] - (4 - m2) * 120750;
+    else if (m2 <= 6) price = BASE_PRICES["4"] + (m2 - 4) * ((BASE_PRICES["6"] - BASE_PRICES["4"]) / 2);
+    else if (m2 <= 8) price = BASE_PRICES["6"] + (m2 - 6) * ((BASE_PRICES["8"] - BASE_PRICES["6"]) / 2);
+    else if (m2 <= 10) price = BASE_PRICES["8"] + (m2 - 8) * ((BASE_PRICES["10"] - BASE_PRICES["8"]) / 2);
+    else price = BASE_PRICES["10"] + (m2 - 10) * ((BASE_PRICES["10"] - BASE_PRICES["8"]) / 2);
+    return price * ipcMultiplier;
+  }, [selectedSize, ipcMultiplier]);
+
   const freightPrice = (cityData.name === "Cap.Fed" ? 0 : cityData.distance * 5500) * ipcMultiplier;
   
   const eventDays = useMemo(() => {
@@ -344,6 +363,9 @@ export default function App() {
         fechaFin: endDate ? endDate.toISOString() : '',
         selectedCity,
         lugarArmado,
+        lote,
+        standAncho,
+        standProfundo,
         selectedSize,
         extrasQty,
         graficasList,
@@ -384,7 +406,9 @@ export default function App() {
       setEndDate(null);
       setSelectedCity(CITIES[0].name);
       setLugarArmado('');
-      setSelectedSize("4");
+      setLote('');
+      setStandAncho('2');
+      setStandProfundo('2');
       setExtrasQty({});
       setGraficasList([]);
       setCustomExtras([]);
@@ -405,7 +429,9 @@ export default function App() {
     setEndDate(quote.fechaFin ? new Date(quote.fechaFin) : null);
     setSelectedCity(quote.selectedCity || CITIES[0].name);
     setLugarArmado(quote.lugarArmado || '');
-    setSelectedSize(quote.selectedSize || "4");
+    setLote(quote.lote || '');
+    setStandAncho(quote.standAncho || '2');
+    setStandProfundo(quote.standProfundo || '2');
     setExtrasQty(quote.extrasQty || {});
     setGraficasList(quote.graficasList || []);
     setCustomExtras(quote.customExtras || []);
@@ -432,7 +458,9 @@ export default function App() {
     setEndDate(null);
     setSelectedCity(CITIES[0].name);
     setLugarArmado('');
-    setSelectedSize("4");
+    setLote('');
+    setStandAncho('2');
+    setStandProfundo('2');
     setExtrasQty({});
     setGraficasList([]);
     setCustomExtras([]);
@@ -607,25 +635,51 @@ export default function App() {
                   />
                 </div>
 
+                {/* Lote */}
+                <div className="space-y-1">
+                  <label htmlFor="lote" className="block text-[10px] sm:text-xs font-medium text-gray-700">
+                    N° de lote
+                  </label>
+                  <input
+                    type="text"
+                    id="lote"
+                    value={lote}
+                    onChange={(e) => setLote(e.target.value)}
+                    placeholder="Ej. 12A"
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-50 py-1.5 px-2 text-xs border"
+                  />
+                </div>
+
                 {/* Size Selection */}
                 <div className="space-y-1">
                   <label className="block text-[10px] sm:text-xs font-medium text-gray-700">
-                    Tamaño (m²)
+                    Tamaño (m²) - Total: {selectedSize} m²
                   </label>
-                  <div className="grid grid-cols-4 gap-1">
-                    {SIZES.map(size => (
-                      <button
-                        key={size}
-                        onClick={() => setSelectedSize(size)}
-                        className={`py-1.5 px-1 rounded-md border text-xs font-medium transition-all ${
-                          selectedSize === size
-                            ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
-                            : 'bg-white border-gray-200 text-gray-700 hover:border-blue-300 hover:bg-blue-50'
-                        }`}
-                      >
-                        {size}
-                      </button>
-                    ))}
+                  <div className="flex space-x-2">
+                    <div className="flex-1">
+                      <label htmlFor="standAncho" className="block text-[10px] text-gray-500 mb-1">Ancho (m)</label>
+                      <input
+                        type="number"
+                        id="standAncho"
+                        min="0"
+                        step="0.1"
+                        value={standAncho}
+                        onChange={(e) => setStandAncho(e.target.value)}
+                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-50 py-1.5 px-2 text-xs border"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label htmlFor="standProfundo" className="block text-[10px] text-gray-500 mb-1">Profundo (m)</label>
+                      <input
+                        type="number"
+                        id="standProfundo"
+                        min="0"
+                        step="0.1"
+                        value={standProfundo}
+                        onChange={(e) => setStandProfundo(e.target.value)}
+                        className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-50 py-1.5 px-2 text-xs border"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1231,6 +1285,115 @@ export default function App() {
                     <Copy className="w-3 h-3" />
                   </button>
                 </div>
+              </div>
+
+              <div className="mb-6">
+                <button 
+                  onClick={() => setShowDetailedBreakdown(!showDetailedBreakdown)}
+                  className="flex items-center justify-between w-full text-left text-xs font-bold text-gray-900 mb-2 uppercase tracking-wider focus:outline-none"
+                >
+                  <span>Detalle Técnico</span>
+                  {showDetailedBreakdown ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                </button>
+                
+                {showDetailedBreakdown && (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 relative group">
+                    <div className="text-xs text-gray-800 font-mono leading-relaxed select-all pr-8 space-y-1">
+                      <p>1. Lote N° {selectedQuoteDetails.lote || '-'} - Medida: {selectedQuoteDetails.standAncho || '-'}x{selectedQuoteDetails.standProfundo || '-'}m ({selectedQuoteDetails.selectedSize}m²)</p>
+                      <p>2. Estructuras de madera pintada.</p>
+                      <p>3. Piso {selectedQuoteDetails.extrasQty?.['piso'] ? 'melamina' : 'alfombra'}.</p>
+                      
+                      {selectedQuoteDetails.graficasList && selectedQuoteDetails.graficasList.length > 0 && (
+                        <div>
+                          <p>4. Gráficas:</p>
+                          <ul className="pl-4">
+                            {selectedQuoteDetails.graficasList.map((g: any, idx: number) => (
+                              <li key={idx}>- {g.ancho}x{g.alto}m</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      
+                      {((selectedQuoteDetails.extrasQty && Object.keys(selectedQuoteDetails.extrasQty).filter(k => k !== 'piso' && k !== 'alfombra' && k !== 'corporeo' && !k.startsWith('tv')).length > 0) || (selectedQuoteDetails.customExtras && selectedQuoteDetails.customExtras.length > 0)) && (
+                        <div>
+                          <p>5. Adicionales:</p>
+                          <ul className="pl-4">
+                            {Object.entries(selectedQuoteDetails.extrasQty || {}).map(([key, qty]) => {
+                              if (key === 'piso' || key === 'alfombra' || key === 'corporeo' || key.startsWith('tv') || !qty) return null;
+                              const extra = EXTRAS.find(e => e.id === key);
+                              return extra ? <li key={key}>- {extra.name} (x{qty})</li> : null;
+                            })}
+                            {selectedQuoteDetails.customExtras?.map((extra: any, idx: number) => (
+                              <li key={`custom-${idx}`}>- {extra.name}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      
+                      {selectedQuoteDetails.extrasQty?.['corporeo'] > 0 && (
+                        <p>6. Corpóreo: {selectedQuoteDetails.extrasQty['corporeo']}m ancho</p>
+                      )}
+                      
+                      {Object.entries(selectedQuoteDetails.extrasQty || {}).filter(([k, v]) => k.startsWith('tv') && (v as number) > 0).map(([k, v]) => {
+                        const tv = EXTRAS.find(e => e.id === k);
+                        return tv ? <p key={k}>7. TV: {tv.name.replace('TV ', '')} (x{v})</p> : null;
+                      })}
+                      
+                      <p>8. Luminaria Led.</p>
+                      <p>9. Instalación eléctrica: caja con tablero y disyuntor.</p>
+                    </div>
+                    
+                    <button 
+                      onClick={() => {
+                        const lines = [
+                          `1. Lote N° ${selectedQuoteDetails.lote || '-'} - Medida: ${selectedQuoteDetails.standAncho || '-'}x${selectedQuoteDetails.standProfundo || '-'}m (${selectedQuoteDetails.selectedSize}m²)`,
+                          `2. Estructuras de madera pintada.`,
+                          `3. Piso ${selectedQuoteDetails.extrasQty?.['piso'] ? 'melamina' : 'alfombra'}.`
+                        ];
+                        
+                        if (selectedQuoteDetails.graficasList && selectedQuoteDetails.graficasList.length > 0) {
+                          lines.push(`4. Gráficas:`);
+                          selectedQuoteDetails.graficasList.forEach((g: any) => {
+                            lines.push(`   - ${g.ancho}x${g.alto}m`);
+                          });
+                        }
+                        
+                        const hasOtherExtras = (selectedQuoteDetails.extrasQty && Object.keys(selectedQuoteDetails.extrasQty).filter(k => k !== 'piso' && k !== 'alfombra' && k !== 'corporeo' && !k.startsWith('tv')).length > 0) || (selectedQuoteDetails.customExtras && selectedQuoteDetails.customExtras.length > 0);
+                        if (hasOtherExtras) {
+                          lines.push(`5. Adicionales:`);
+                          Object.entries(selectedQuoteDetails.extrasQty || {}).forEach(([key, qty]) => {
+                            if (key === 'piso' || key === 'alfombra' || key === 'corporeo' || key.startsWith('tv') || !qty) return;
+                            const extra = EXTRAS.find(e => e.id === key);
+                            if (extra) lines.push(`   - ${extra.name} (x${qty})`);
+                          });
+                          selectedQuoteDetails.customExtras?.forEach((extra: any) => {
+                            lines.push(`   - ${extra.name}`);
+                          });
+                        }
+                        
+                        if (selectedQuoteDetails.extrasQty?.['corporeo'] > 0) {
+                          lines.push(`6. Corpóreo: ${selectedQuoteDetails.extrasQty['corporeo']}m ancho`);
+                        }
+                        
+                        Object.entries(selectedQuoteDetails.extrasQty || {}).forEach(([k, v]) => {
+                          if (k.startsWith('tv') && (v as number) > 0) {
+                            const tv = EXTRAS.find(e => e.id === k);
+                            if (tv) lines.push(`7. TV: ${tv.name.replace('TV ', '')} (x${v})`);
+                          }
+                        });
+                        
+                        lines.push(`8. Luminaria Led.`);
+                        lines.push(`9. Instalación eléctrica: caja con tablero y disyuntor.`);
+                        
+                        navigator.clipboard.writeText(lines.join('\n'));
+                      }}
+                      className="absolute top-2 right-2 p-1.5 bg-white border border-gray-200 rounded shadow-sm opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 hover:text-blue-600"
+                      title="Copiar texto"
+                    >
+                      <Copy className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div>

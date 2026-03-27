@@ -29,6 +29,26 @@
           "type": "string",
           "description": "Selected size of the stand in m2."
         },
+        "lote": {
+          "type": "string",
+          "description": "Lot number."
+        },
+        "standAncho": {
+          "type": "string",
+          "description": "Width of the stand."
+        },
+        "standProfundo": {
+          "type": "string",
+          "description": "Depth of the stand."
+        },
+        "cuit": {
+          "type": "string",
+          "description": "CUIT of the client."
+        },
+        "lugarArmado": {
+          "type": "string",
+          "description": "Assembly location."
+        },
         "extrasQty": {
           "type": "object",
           "description": "Map of extra item IDs to their quantities."
