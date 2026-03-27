@@ -1048,13 +1048,23 @@ export default function App() {
                 <Receipt className="w-5 h-5 text-blue-600" />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-gray-900">{selectedQuoteDetails.evento}</h3>
-                <p className="text-xs text-gray-500">{selectedQuoteDetails.cliente}</p>
+                <h3 className="text-lg font-bold text-gray-900">Detalle de Presupuesto</h3>
+                <p className="text-xs text-gray-500">
+                  Emitido el {selectedQuoteDetails.createdAt?.toDate ? selectedQuoteDetails.createdAt.toDate().toLocaleDateString('es-AR') : '-'}
+                </p>
               </div>
             </div>
 
             <div className="overflow-y-auto flex-1 pr-2 space-y-4">
               <div className="grid grid-cols-2 gap-3 bg-gray-50 p-3 rounded-lg border border-gray-100">
+                <div className="col-span-2 sm:col-span-1">
+                  <p className="text-[10px] text-gray-500 uppercase font-semibold tracking-wider">Cliente</p>
+                  <p className="text-xs font-medium text-gray-900 mt-0.5">{selectedQuoteDetails.cliente}</p>
+                </div>
+                <div className="col-span-2 sm:col-span-1">
+                  <p className="text-[10px] text-gray-500 uppercase font-semibold tracking-wider">Evento</p>
+                  <p className="text-xs font-medium text-gray-900 mt-0.5">{selectedQuoteDetails.evento}</p>
+                </div>
                 <div>
                   <p className="text-[10px] text-gray-500 uppercase font-semibold tracking-wider">Fechas</p>
                   <p className="text-xs font-medium text-gray-900 mt-0.5">
@@ -1063,7 +1073,10 @@ export default function App() {
                 </div>
                 <div>
                   <p className="text-[10px] text-gray-500 uppercase font-semibold tracking-wider">Ubicación</p>
-                  <p className="text-xs font-medium text-gray-900 mt-0.5">{selectedQuoteDetails.selectedCity}</p>
+                  <p className="text-xs font-medium text-gray-900 mt-0.5">
+                    {selectedQuoteDetails.selectedCity}
+                    {selectedQuoteDetails.lugarArmado ? ` - ${selectedQuoteDetails.lugarArmado}` : ''}
+                  </p>
                 </div>
                 <div>
                   <p className="text-[10px] text-gray-500 uppercase font-semibold tracking-wider">Tamaño</p>
@@ -1084,14 +1097,30 @@ export default function App() {
                     <span className="text-xs text-gray-600">Stand Base</span>
                     <span className="text-xs font-medium text-gray-900">{formatCurrency(selectedQuoteDetails.basePrice)}</span>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-xs text-gray-600">Flete</span>
-                    <span className="text-xs font-medium text-gray-900">{formatCurrency(selectedQuoteDetails.freightPrice)}</span>
-                  </div>
+                  {selectedQuoteDetails.selectedCity !== 'Cap.Fed' && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs text-gray-600">Flete</span>
+                      <span className="text-xs font-medium text-gray-900">{formatCurrency(selectedQuoteDetails.freightPrice)}</span>
+                    </div>
+                  )}
                   
-                  {((selectedQuoteDetails.extrasQty && Object.keys(selectedQuoteDetails.extrasQty).length > 0) || (selectedQuoteDetails.customExtras && selectedQuoteDetails.customExtras.length > 0)) && (
+                  {((selectedQuoteDetails.extrasQty && Object.keys(selectedQuoteDetails.extrasQty).length > 0) || (selectedQuoteDetails.customExtras && selectedQuoteDetails.customExtras.length > 0) || (selectedQuoteDetails.graficasList && selectedQuoteDetails.graficasList.length > 0)) && (
                     <div className="pt-2 mt-2 border-t border-gray-100">
                       <p className="text-[10px] text-gray-500 font-semibold mb-1">Adicionales:</p>
+                      
+                      {selectedQuoteDetails.graficasList && selectedQuoteDetails.graficasList.length > 0 && (() => {
+                        const totalArea = selectedQuoteDetails.graficasList.reduce((acc: number, g: any) => acc + (g.ancho * g.alto), 0);
+                        const extraDef = EXTRAS.find(e => e.id === 'grafica');
+                        if (!extraDef) return null;
+                        const extraPrice = extraDef.price * (1 + (selectedQuoteDetails.ipcValue || 0) / 100) * totalArea;
+                        return (
+                          <div className="flex justify-between items-center pl-2 mt-1">
+                            <span className="text-[11px] text-gray-600">• {extraDef.name} ({totalArea.toFixed(2)} m²)</span>
+                            <span className="text-[11px] font-medium text-gray-900">{formatCurrency(extraPrice)}</span>
+                          </div>
+                        );
+                      })()}
+
                       {selectedQuoteDetails.extrasQty && Object.entries(selectedQuoteDetails.extrasQty).map(([extraId, qty]) => {
                         if ((qty as number) <= 0) return null;
                         const extraDef = EXTRAS.find(e => e.id === extraId);
