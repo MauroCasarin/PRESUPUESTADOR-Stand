@@ -21,7 +21,8 @@ import {
   ChevronRight,
   X,
   LogOut,
-  LogIn
+  LogIn,
+  Copy
 } from 'lucide-react';
 import { db } from './firebase';
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp, getDocFromServer } from 'firebase/firestore';
@@ -1210,6 +1211,25 @@ export default function App() {
                   <p className="text-xs font-medium text-gray-900 mt-0.5">
                     {selectedQuoteDetails.createdAt?.toDate ? selectedQuoteDetails.createdAt.toDate().toLocaleDateString('es-AR') : '-'}
                   </p>
+                </div>
+              </div>
+
+              <div className="mb-6">
+                <h4 className="text-xs font-bold text-gray-900 mb-2 uppercase tracking-wider">Producto / Servicio (Resumen)</h4>
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 relative group">
+                  <p className="text-xs text-gray-800 font-mono leading-relaxed select-all pr-8">
+                    {selectedQuoteDetails.cliente} / STAND: {selectedQuoteDetails.evento} / {selectedQuoteDetails.fechaInicio ? new Date(selectedQuoteDetails.fechaInicio).toLocaleDateString('es-AR') : '-'} al {selectedQuoteDetails.fechaFin ? new Date(selectedQuoteDetails.fechaFin).toLocaleDateString('es-AR') : '-'} / {selectedQuoteDetails.selectedCity}{selectedQuoteDetails.lugarArmado ? ` - ${selectedQuoteDetails.lugarArmado}` : ''} / {formatCurrency(selectedQuoteDetails.grandTotal)}
+                  </p>
+                  <button 
+                    onClick={() => {
+                      const text = `${selectedQuoteDetails.cliente} / STAND: ${selectedQuoteDetails.evento} / ${selectedQuoteDetails.fechaInicio ? new Date(selectedQuoteDetails.fechaInicio).toLocaleDateString('es-AR') : '-'} al ${selectedQuoteDetails.fechaFin ? new Date(selectedQuoteDetails.fechaFin).toLocaleDateString('es-AR') : '-'} / ${selectedQuoteDetails.selectedCity}${selectedQuoteDetails.lugarArmado ? ` - ${selectedQuoteDetails.lugarArmado}` : ''} / ${formatCurrency(selectedQuoteDetails.grandTotal)}`;
+                      navigator.clipboard.writeText(text);
+                    }}
+                    className="absolute top-2 right-2 p-1.5 bg-white border border-gray-200 rounded shadow-sm opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 hover:text-blue-600"
+                    title="Copiar texto"
+                  >
+                    <Copy className="w-3 h-3" />
+                  </button>
                 </div>
               </div>
 
