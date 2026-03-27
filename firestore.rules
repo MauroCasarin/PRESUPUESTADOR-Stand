@@ -11,19 +11,38 @@ service cloud.firestore {
     // Document ID: [auto-generated]
     // Fields:
     //   - cliente: string (required) - Name of the client.
+    //   - cuit: string (optional) - CUIT of the client.
     //   - evento: string (required) - Name of the event.
     //   - fechaInicio: string (optional) - Start date of the event.
     //   - fechaFin: string (optional) - End date of the event.
     //   - selectedCity: string (required) - Selected city for the stand.
     //   - selectedSize: string (required) - Selected size of the stand in m2.
+    //   - lote: string (optional) - Lot number.
+    //   - standAncho: string (optional) - Width of the stand.
+    //   - standProfundo: string (optional) - Depth of the stand.
+    //   - lugarArmado: string (optional) - Assembly location.
     //   - extrasQty: map (required) - Map of extra item IDs to their quantities.
+    //   - graficasList: list (optional) - List of graphics dimensions.
+    //   - customExtras: list (optional) - List of custom extra items.
     //   - ipcMonth: string (required) - Month of the IPC used.
     //   - ipcValue: number (required) - Value of the IPC used.
     //   - basePrice: number (required) - Calculated base price.
     //   - freightPrice: number (required) - Calculated freight price.
     //   - extrasTotal: number (required) - Calculated extras total.
+    //   - clientPaymentDays: number (optional) - Client payment days.
+    //   - financialSurchargePercent: number (optional) - Financial surcharge percentage.
+    //   - subtotal: number (optional) - Subtotal amount.
+    //   - financialSurchargeAmount: number (optional) - Financial surcharge amount.
     //   - grandTotal: number (required) - Calculated grand total.
     //   - createdAt: timestamp (optional) - When the quote was created.
+    //
+    // Collection: clients
+    // Document ID: [auto-generated]
+    // Fields:
+    //   - name: string (required) - Name of the client.
+    //   - cuit: string (optional) - CUIT of the client.
+    //   - paymentDays: number (optional) - Default payment days.
+    //   - createdAt: timestamp (optional) - When the client was created.
     //
     // ===============================================================
 
@@ -31,6 +50,10 @@ service cloud.firestore {
     // Helper Functions
     // ===============================================================
     
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
     function hasRequiredFields(fields) {
       return request.resource.data.keys().hasAll(fields);
     }
@@ -72,15 +95,35 @@ service cloud.firestore {
              d.grandTotal is number;
     }
 
+    function isValidClient() {
+      let d = request.resource.data;
+      return d.keys().hasAll(['name']) &&
+             d.name is string && d.name.size() > 0 && d.name.size() <= 200 &&
+             (!('cuit' in d) || (d.cuit is string && d.cuit.size() <= 20)) &&
+             (!('paymentDays' in d) || (d.paymentDays is number && d.paymentDays >= 0));
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
     
+    // NOTE: For now, we allow public access as the app doesn't have auth implemented.
+    // In a production environment, you should implement authentication and restrict access.
+    
     match /quotes/{quoteId} {
       allow read, write: if true;
+      // allow create, update: if isValidQuote();
+      // allow delete: if true;
     }
+
     match /clients/{clientId} {
       allow read, write: if true;
+      // allow create, update: if isValidClient();
+      // allow delete: if true;
+    }
+
+    match /test/connection {
+      allow read: if true;
     }
   }
 }

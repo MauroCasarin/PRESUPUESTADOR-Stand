@@ -57,10 +57,10 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 
 // --- DATA EXTRACTED FROM EXCEL ---
 const BASE_PRICES = {
-  "4": 2950000,
-  "6": 3191500,
-  "8": 3430000,
-  "10": 3673500
+  "4": 3062914,
+  "6": 3313623,
+  "8": 3564957,
+  "10": 3813860
 };
 
 const CITIES = [
@@ -95,7 +95,7 @@ type ExtraItem = {
 };
 
 const EXTRAS: ExtraItem[] = [
-  { id: 'grafica', name: 'Gráfica en MDF', price: 54000, unit: 'm²', icon: ImageIcon },
+  { id: 'grafica', name: 'Gráfica en MDF', price: 62476, unit: 'm²', icon: ImageIcon },
   { id: 'corporeo', name: 'Corpóreo', price: 121000, unit: 'm lineal', icon: Layers },
   { id: 'piso', name: 'Piso melamina', price: 64130, unit: 'm²', icon: Layers },
   { id: 'alfombra', name: 'Alfombra', price: 25300, unit: 'm²', icon: Layers },
@@ -131,13 +131,16 @@ export default function App() {
   const [graficasList, setGraficasList] = useState<{ id: string, ancho: number, alto: number }[]>([]);
   const [newGraficaAncho, setNewGraficaAncho] = useState('');
   const [newGraficaAlto, setNewGraficaAlto] = useState('');
-  const [ipcData, setIpcData] = useState<{ month: string, value: number, loading: boolean }>({ month: '', value: 0, loading: true });
+  const [ipcData, setIpcData] = useState<{ month: string, value: number, multiplier: number, loading: boolean }>({ month: '', value: 0, multiplier: 1, loading: true });
   
   const [savedQuotes, setSavedQuotes] = useState<any[]>([]);
   const [clientsList, setClientsList] = useState<any[]>([]);
   const [showAddClientModal, setShowAddClientModal] = useState(false);
   const [newClientName, setNewClientName] = useState('');
   const [newClientCuit, setNewClientCuit] = useState('');
+  const [newClientPaymentDays, setNewClientPaymentDays] = useState('0');
+  const [editingClientData, setEditingClientData] = useState<any>(null);
+  const [clientPaymentDays, setClientPaymentDays] = useState<number>(0);
   
   const [isSaving, setIsSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -178,9 +181,20 @@ export default function App() {
           const date = new Date(latest.fecha + 'T00:00:00');
           const monthName = date.toLocaleString('es-AR', { month: 'long', timeZone: 'UTC' });
           const capitalizedMonth = monthName.charAt(0).toUpperCase() + monthName.slice(1);
-          setIpcData({ month: capitalizedMonth, value: latest.valor, loading: false });
           
-          // Calculate accumulated inflation since last August
+          // Calculate accumulated inflation since March 2026
+          // The base prices are for March 2026, so we only apply inflation from March 2026 onwards.
+          // In Argentina, March inflation is published in April.
+          let multiplier = 1;
+          for (let i = 0; i < data.length; i++) {
+            if (data[i].fecha >= '2026-03-01') {
+              multiplier *= (1 + data[i].valor / 100);
+            }
+          }
+          
+          setIpcData({ month: capitalizedMonth, value: latest.valor, multiplier, loading: false });
+          
+          // Calculate accumulated inflation since last August for Sue value
           let lastAugustIndex = -1;
           for (let i = data.length - 1; i >= 0; i--) {
             if (data[i].fecha.includes('-08-')) {
@@ -242,9 +256,14 @@ export default function App() {
   useEffect(() => {
     if (cliente) {
       const found = clientsList.find(c => c.name.toLowerCase() === cliente.toLowerCase());
-      if (found && !cuit) {
-        setCuit(found.cuit || '');
+      if (found) {
+        if (!cuit) setCuit(found.cuit || '');
+        setClientPaymentDays(found.paymentDays || 0);
+      } else {
+        setClientPaymentDays(0);
       }
+    } else {
+      setClientPaymentDays(0);
     }
   }, [cliente, clientsList]);
 
@@ -297,22 +316,28 @@ export default function App() {
     return (ancho * profundo).toString();
   }, [standAncho, standProfundo]);
 
-  const ipcMultiplier = 1 + (ipcData.value / 100);
+  const ipcMultiplier = ipcData.multiplier;
 
   const cityData = useMemo(() => CITIES.find(c => c.name === selectedCity) || CITIES[0], [selectedCity]);
   
   const basePrice = useMemo(() => {
     const m2 = parseFloat(selectedSize) || 0;
     let price = 0;
-    if (m2 <= 4) price = BASE_PRICES["4"] - (4 - m2) * 120750;
-    else if (m2 <= 6) price = BASE_PRICES["4"] + (m2 - 4) * ((BASE_PRICES["6"] - BASE_PRICES["4"]) / 2);
-    else if (m2 <= 8) price = BASE_PRICES["6"] + (m2 - 6) * ((BASE_PRICES["8"] - BASE_PRICES["6"]) / 2);
-    else if (m2 <= 10) price = BASE_PRICES["8"] + (m2 - 8) * ((BASE_PRICES["10"] - BASE_PRICES["8"]) / 2);
-    else price = BASE_PRICES["10"] + (m2 - 10) * ((BASE_PRICES["10"] - BASE_PRICES["8"]) / 2);
+    if (m2 <= 4) {
+      price = BASE_PRICES["4"];
+    } else if (m2 <= 6) {
+      price = BASE_PRICES["4"] + (m2 - 4) * ((BASE_PRICES["6"] - BASE_PRICES["4"]) / 2);
+    } else if (m2 <= 8) {
+      price = BASE_PRICES["6"] + (m2 - 6) * ((BASE_PRICES["8"] - BASE_PRICES["6"]) / 2);
+    } else if (m2 <= 10) {
+      price = BASE_PRICES["8"] + (m2 - 8) * ((BASE_PRICES["10"] - BASE_PRICES["8"]) / 2);
+    } else {
+      price = BASE_PRICES["10"] + (m2 - 10) * ((BASE_PRICES["10"] - BASE_PRICES["8"]) / 2);
+    }
     return price * ipcMultiplier;
   }, [selectedSize, ipcMultiplier]);
 
-  const freightPrice = (cityData.name === "Cap.Fed" ? 0 : cityData.distance * 5500) * ipcMultiplier;
+  const freightPrice = (cityData.name === "Cap.Fed" ? 0 : cityData.distance * 5660) * ipcMultiplier;
   
   const eventDays = useMemo(() => {
     if (!startDate || !endDate) return 1;
@@ -341,7 +366,10 @@ export default function App() {
     return standardExtras + customExtrasTotal;
   }, [extrasQty, customExtras, graficasList, ipcMultiplier, eventDays]);
 
-  const grandTotal = basePrice + freightPrice + extrasTotal;
+  const subtotal = basePrice + freightPrice + extrasTotal;
+  const financialSurchargePercent = (clientPaymentDays / 30) * ipcData.value;
+  const financialSurchargeAmount = subtotal * (financialSurchargePercent / 100);
+  const grandTotal = subtotal + financialSurchargeAmount;
 
   const handleSaveQuote = async () => {
     if (!cliente || !evento) {
@@ -375,6 +403,10 @@ export default function App() {
         basePrice,
         freightPrice,
         extrasTotal,
+        clientPaymentDays,
+        financialSurchargePercent,
+        subtotal,
+        financialSurchargeAmount,
         grandTotal,
       };
 
@@ -432,6 +464,7 @@ export default function App() {
     setLote(quote.lote || '');
     setStandAncho(quote.standAncho || '2');
     setStandProfundo(quote.standProfundo || '2');
+    setClientPaymentDays(quote.clientPaymentDays || 0);
     setExtrasQty(quote.extrasQty || {});
     setGraficasList(quote.graficasList || []);
     setCustomExtras(quote.customExtras || []);
@@ -524,12 +557,37 @@ export default function App() {
                 <div className="space-y-1">
                   <div className="flex justify-between items-center">
                     <label htmlFor="cliente" className="block text-[10px] sm:text-xs font-medium text-gray-700">Cliente</label>
-                    <button 
-                      onClick={() => setShowAddClientModal(true)}
-                      className="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-0.5"
-                    >
-                      <Plus className="w-3 h-3" /> Nuevo Cliente
-                    </button>
+                    <div className="flex gap-2">
+                      {clientsList.find(c => c.name.toLowerCase() === cliente.toLowerCase()) && (
+                        <button 
+                          onClick={() => {
+                            const found = clientsList.find(c => c.name.toLowerCase() === cliente.toLowerCase());
+                            if (found) {
+                              setEditingClientData(found);
+                              setNewClientName(found.name);
+                              setNewClientCuit(found.cuit || '');
+                              setNewClientPaymentDays((found.paymentDays || 0).toString());
+                              setShowAddClientModal(true);
+                            }
+                          }}
+                          className="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-0.5"
+                        >
+                          Editar
+                        </button>
+                      )}
+                      <button 
+                        onClick={() => {
+                          setEditingClientData(null);
+                          setNewClientName('');
+                          setNewClientCuit('');
+                          setNewClientPaymentDays('0');
+                          setShowAddClientModal(true);
+                        }}
+                        className="text-[10px] text-blue-600 hover:text-blue-800 flex items-center gap-0.5"
+                      >
+                        <Plus className="w-3 h-3" /> Nuevo
+                      </button>
+                    </div>
                   </div>
                   <div className="relative">
                     <input
@@ -1154,7 +1212,7 @@ export default function App() {
             >
               <X className="w-4 h-4" />
             </button>
-            <h3 className="text-lg font-bold text-gray-900 mb-4">Nuevo Cliente</h3>
+            <h3 className="text-lg font-bold text-gray-900 mb-4">{editingClientData ? 'Editar Cliente' : 'Nuevo Cliente'}</h3>
             <div className="space-y-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">Nombre</label>
@@ -1176,28 +1234,52 @@ export default function App() {
                   placeholder="CUIT (opcional)"
                 />
               </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Forma de pago (días)</label>
+                <input 
+                  type="number"
+                  min="0"
+                  value={newClientPaymentDays}
+                  onChange={(e) => setNewClientPaymentDays(e.target.value)}
+                  className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 bg-gray-50 py-2 px-3 text-sm border"
+                  placeholder="Ej. 0, 30, 60"
+                />
+              </div>
               <button 
                 onClick={async () => {
                   if (!newClientName) return;
                   try {
-                    await addDoc(collection(db, 'clients'), {
-                      name: newClientName,
-                      cuit: newClientCuit,
-                      createdAt: serverTimestamp()
-                    });
+                    const paymentDaysNum = parseInt(newClientPaymentDays) || 0;
+                    if (editingClientData) {
+                      await updateDoc(doc(db, 'clients', editingClientData.id), {
+                        name: newClientName,
+                        cuit: newClientCuit,
+                        paymentDays: paymentDaysNum
+                      });
+                    } else {
+                      await addDoc(collection(db, 'clients'), {
+                        name: newClientName,
+                        cuit: newClientCuit,
+                        paymentDays: paymentDaysNum,
+                        createdAt: serverTimestamp()
+                      });
+                    }
                     setCliente(newClientName);
                     setCuit(newClientCuit);
+                    setClientPaymentDays(paymentDaysNum);
                     setShowAddClientModal(false);
                     setNewClientName('');
                     setNewClientCuit('');
+                    setNewClientPaymentDays('0');
+                    setEditingClientData(null);
                   } catch (error) {
-                    console.error("Error adding client", error);
-                    handleFirestoreError(error, OperationType.CREATE, 'clients');
+                    console.error("Error saving client", error);
+                    handleFirestoreError(error, editingClientData ? OperationType.UPDATE : OperationType.CREATE, 'clients');
                   }
                 }}
                 className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium transition-colors mt-2"
               >
-                Guardar Cliente
+                {editingClientData ? 'Actualizar Cliente' : 'Guardar Cliente'}
               </button>
             </div>
           </div>
@@ -1272,11 +1354,11 @@ export default function App() {
                 <h4 className="text-xs font-bold text-gray-900 mb-2 uppercase tracking-wider">Producto / Servicio (Resumen)</h4>
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 relative group">
                   <p className="text-xs text-gray-800 font-mono leading-relaxed select-all pr-8">
-                    {selectedQuoteDetails.cliente} / STAND: {selectedQuoteDetails.evento} / {selectedQuoteDetails.fechaInicio ? new Date(selectedQuoteDetails.fechaInicio).toLocaleDateString('es-AR') : '-'} al {selectedQuoteDetails.fechaFin ? new Date(selectedQuoteDetails.fechaFin).toLocaleDateString('es-AR') : '-'} / {selectedQuoteDetails.selectedCity}{selectedQuoteDetails.lugarArmado ? ` - ${selectedQuoteDetails.lugarArmado}` : ''} / {formatCurrency(selectedQuoteDetails.grandTotal)}
+                    {selectedQuoteDetails.cliente} / STAND: {selectedQuoteDetails.evento} / {selectedQuoteDetails.fechaInicio ? new Date(selectedQuoteDetails.fechaInicio).toLocaleDateString('es-AR') : '-'} al {selectedQuoteDetails.fechaFin ? new Date(selectedQuoteDetails.fechaFin).toLocaleDateString('es-AR') : '-'} / {selectedQuoteDetails.selectedCity}{selectedQuoteDetails.lugarArmado ? ` - ${selectedQuoteDetails.lugarArmado}` : ''} / {selectedQuoteDetails.clientPaymentDays > 0 ? `Pago a ${selectedQuoteDetails.clientPaymentDays} días / ` : ''}{formatCurrency(selectedQuoteDetails.grandTotal)}
                   </p>
                   <button 
                     onClick={() => {
-                      const text = `${selectedQuoteDetails.cliente} / STAND: ${selectedQuoteDetails.evento} / ${selectedQuoteDetails.fechaInicio ? new Date(selectedQuoteDetails.fechaInicio).toLocaleDateString('es-AR') : '-'} al ${selectedQuoteDetails.fechaFin ? new Date(selectedQuoteDetails.fechaFin).toLocaleDateString('es-AR') : '-'} / ${selectedQuoteDetails.selectedCity}${selectedQuoteDetails.lugarArmado ? ` - ${selectedQuoteDetails.lugarArmado}` : ''} / ${formatCurrency(selectedQuoteDetails.grandTotal)}`;
+                      const text = `${selectedQuoteDetails.cliente} / STAND: ${selectedQuoteDetails.evento} / ${selectedQuoteDetails.fechaInicio ? new Date(selectedQuoteDetails.fechaInicio).toLocaleDateString('es-AR') : '-'} al ${selectedQuoteDetails.fechaFin ? new Date(selectedQuoteDetails.fechaFin).toLocaleDateString('es-AR') : '-'} / ${selectedQuoteDetails.selectedCity}${selectedQuoteDetails.lugarArmado ? ` - ${selectedQuoteDetails.lugarArmado}` : ''} / ${selectedQuoteDetails.clientPaymentDays > 0 ? `Pago a ${selectedQuoteDetails.clientPaymentDays} días / ` : ''}${formatCurrency(selectedQuoteDetails.grandTotal)}`;
                       navigator.clipboard.writeText(text);
                     }}
                     className="absolute top-2 right-2 p-1.5 bg-white border border-gray-200 rounded shadow-sm opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 hover:text-blue-600"
@@ -1321,7 +1403,7 @@ export default function App() {
                             {Object.entries(selectedQuoteDetails.extrasQty || {}).map(([key, qty]) => {
                               if (key === 'piso' || key === 'alfombra' || key === 'corporeo' || key.startsWith('tv') || !qty) return null;
                               const extra = EXTRAS.find(e => e.id === key);
-                              return extra ? <li key={key}>- {extra.name} (x{qty})</li> : null;
+                              return extra ? <li key={key}>- {extra.name} (x{qty as number})</li> : null;
                             })}
                             {selectedQuoteDetails.customExtras?.map((extra: any, idx: number) => (
                               <li key={`custom-${idx}`}>- {extra.name}</li>
@@ -1331,12 +1413,12 @@ export default function App() {
                       )}
                       
                       {selectedQuoteDetails.extrasQty?.['corporeo'] > 0 && (
-                        <p>6. Corpóreo: {selectedQuoteDetails.extrasQty['corporeo']}m ancho</p>
+                        <p>6. Corpóreo: {selectedQuoteDetails.extrasQty['corporeo'] as number}m ancho</p>
                       )}
                       
                       {Object.entries(selectedQuoteDetails.extrasQty || {}).filter(([k, v]) => k.startsWith('tv') && (v as number) > 0).map(([k, v]) => {
                         const tv = EXTRAS.find(e => e.id === k);
-                        return tv ? <p key={k}>7. TV: {tv.name.replace('TV ', '')} (x{v})</p> : null;
+                        return tv ? <p key={k}>7. TV: {tv.name.replace('TV ', '')} (x{v as number})</p> : null;
                       })}
                       
                       <p>8. Luminaria Led.</p>
@@ -1458,6 +1540,17 @@ export default function App() {
                           <span className="text-[11px] font-medium text-gray-900">{formatCurrency(extra.price)}</span>
                         </div>
                       ))}
+                    </div>
+                  )}
+                  
+                  {selectedQuoteDetails.clientPaymentDays > 0 && (
+                    <div className="pt-2 mt-2 border-t border-gray-100">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-gray-600">
+                          Recargo Financiero ({selectedQuoteDetails.clientPaymentDays} días - {selectedQuoteDetails.financialSurchargePercent?.toFixed(2)}%)
+                        </span>
+                        <span className="text-xs font-medium text-gray-900">{formatCurrency(selectedQuoteDetails.financialSurchargeAmount)}</span>
+                      </div>
                     </div>
                   )}
                 </div>

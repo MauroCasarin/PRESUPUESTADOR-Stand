@@ -5,53 +5,29 @@
       "description": "A saved quote/presupuesto for a stand.",
       "type": "object",
       "properties": {
-        "cliente": {
-          "type": "string",
-          "description": "Name of the client."
-        },
-        "evento": {
-          "type": "string",
-          "description": "Name of the event."
-        },
-        "fechaInicio": {
-          "type": "string",
-          "description": "Start date of the event."
-        },
-        "fechaFin": {
-          "type": "string",
-          "description": "End date of the event."
-        },
-        "selectedCity": {
-          "type": "string",
-          "description": "Selected city for the stand."
-        },
-        "selectedSize": {
-          "type": "string",
-          "description": "Selected size of the stand in m2."
-        },
-        "lote": {
-          "type": "string",
-          "description": "Lot number."
-        },
-        "standAncho": {
-          "type": "string",
-          "description": "Width of the stand."
-        },
-        "standProfundo": {
-          "type": "string",
-          "description": "Depth of the stand."
-        },
-        "cuit": {
-          "type": "string",
-          "description": "CUIT of the client."
-        },
-        "lugarArmado": {
-          "type": "string",
-          "description": "Assembly location."
-        },
-        "extrasQty": {
-          "type": "object",
-          "description": "Map of extra item IDs to their quantities."
+        "cliente": { "type": "string", "description": "Name of the client." },
+        "evento": { "type": "string", "description": "Name of the event." },
+        "fechaInicio": { "type": "string", "description": "Start date of the event." },
+        "fechaFin": { "type": "string", "description": "End date of the event." },
+        "selectedCity": { "type": "string", "description": "Selected city for the stand." },
+        "selectedSize": { "type": "string", "description": "Selected size of the stand in m2." },
+        "lote": { "type": "string", "description": "Lot number." },
+        "standAncho": { "type": "string", "description": "Width of the stand." },
+        "standProfundo": { "type": "string", "description": "Depth of the stand." },
+        "cuit": { "type": "string", "description": "CUIT of the client." },
+        "lugarArmado": { "type": "string", "description": "Assembly location." },
+        "extrasQty": { "type": "object", "description": "Map of extra item IDs to their quantities." },
+        "graficasList": {
+          "type": "array",
+          "description": "List of graphics dimensions.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "ancho": { "type": "number" },
+              "alto": { "type": "number" }
+            }
+          }
         },
         "customExtras": {
           "type": "array",
@@ -65,44 +41,40 @@
             }
           }
         },
-        "ipcMonth": {
-          "type": "string",
-          "description": "Month of the IPC used."
-        },
-        "ipcValue": {
-          "type": "number",
-          "description": "Value of the IPC used."
-        },
-        "basePrice": {
-          "type": "number",
-          "description": "Calculated base price."
-        },
-        "freightPrice": {
-          "type": "number",
-          "description": "Calculated freight price."
-        },
-        "extrasTotal": {
-          "type": "number",
-          "description": "Calculated extras total."
-        },
-        "grandTotal": {
-          "type": "number",
-          "description": "Calculated grand total."
-        },
-        "createdAt": {
-          "type": "timestamp",
-          "description": "When the quote was created."
-        }
+        "ipcMonth": { "type": "string", "description": "Month of the IPC used." },
+        "ipcValue": { "type": "number", "description": "Value of the IPC used." },
+        "basePrice": { "type": "number", "description": "Calculated base price." },
+        "freightPrice": { "type": "number", "description": "Calculated freight price." },
+        "extrasTotal": { "type": "number", "description": "Calculated extras total." },
+        "clientPaymentDays": { "type": "number", "description": "Client payment days." },
+        "financialSurchargePercent": { "type": "number", "description": "Financial surcharge percentage." },
+        "subtotal": { "type": "number", "description": "Subtotal amount." },
+        "financialSurchargeAmount": { "type": "number", "description": "Financial surcharge amount." },
+        "grandTotal": { "type": "number", "description": "Calculated grand total." },
+        "createdAt": { "type": "timestamp", "description": "When the quote was created." }
       },
       "required": ["cliente", "evento", "selectedCity", "selectedSize", "extrasQty", "ipcMonth", "ipcValue", "basePrice", "freightPrice", "extrasTotal", "grandTotal"]
+    },
+    "Client": {
+      "title": "Client",
+      "description": "Represents a client in the system.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Client name" },
+        "cuit": { "type": "string", "description": "Client CUIT" },
+        "paymentDays": { "type": "number", "description": "Default payment days for the client" }
+      },
+      "required": ["name"]
     }
   },
   "firestore": {
     "/quotes/{quoteId}": {
-      "schema": {
-        "$ref": "#/entities/Quote"
-      },
+      "schema": { "$ref": "#/entities/Quote" },
       "description": "Stores all the quotes created by users."
+    },
+    "/clients/{clientId}": {
+      "schema": { "$ref": "#/entities/Client" },
+      "description": "Stores all the clients."
     }
   }
 }
