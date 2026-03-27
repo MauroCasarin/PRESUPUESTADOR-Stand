@@ -77,10 +77,7 @@ service cloud.firestore {
     // ===============================================================
     
     match /quotes/{quoteId} {
-      allow read: if true;
-      allow create: if isValidQuote();
-      allow update: if isValidQuote() && areImmutableFieldsUnchanged(['createdAt']);
-      allow delete: if true;
+      allow read, write: if true;
     }
   }
 }
