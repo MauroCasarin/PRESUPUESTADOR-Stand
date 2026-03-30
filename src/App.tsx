@@ -192,11 +192,11 @@ export default function App() {
           const monthName = date.toLocaleString('es-AR', { month: 'long', timeZone: 'UTC' });
           const capitalizedMonth = monthName.charAt(0).toUpperCase() + monthName.slice(1);
           
-          // Calculate accumulated inflation since February 2026
-          // The user wants to add February IPC to the March base prices.
+          // Calculate accumulated inflation since March 2026
+          // The base prices are updated to March 2026.
           let multiplier = 1;
           for (let i = 0; i < data.length; i++) {
-            if (data[i].fecha >= '2026-02-01') {
+            if (data[i].fecha > '2026-03-31') {
               multiplier *= (1 + data[i].valor / 100);
             }
           }
@@ -319,7 +319,7 @@ export default function App() {
     return (ancho * profundo).toString();
   }, [standAncho, standProfundo]);
 
-  const ipcMultiplier = ipcData.multiplier * 1.0375;
+  const ipcMultiplier = ipcData.multiplier;
 
   const cityData = useMemo(() => CITIES.find(c => c.name === selectedCity) || CITIES[0], [selectedCity]);
   
@@ -340,7 +340,7 @@ export default function App() {
     return price * ipcMultiplier;
   }, [selectedSize, ipcMultiplier]);
 
-  const freightPrice = (cityData.name === "Cap.Fed" ? 0 : cityData.distance * 5660) * ipcMultiplier;
+  const freightPrice = (cityData.name === "Cap.Fed" ? 0 : cityData.distance * 5000) * ipcMultiplier;
   
   const eventDays = useMemo(() => {
     if (!startDate || !endDate) return 1;

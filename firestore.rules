@@ -54,6 +54,12 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "mauro.j.casarin@gmail.com" && request.auth.token.email_verified == true)); // Default admin
+    }
+
     function hasRequiredFields(fields) {
       return request.resource.data.keys().hasAll(fields);
     }
@@ -107,19 +113,16 @@ service cloud.firestore {
     // Rules
     // ===============================================================
     
-    // NOTE: For now, we allow public access as the app doesn't have auth implemented.
-    // In a production environment, you should implement authentication and restrict access.
-    
     match /quotes/{quoteId} {
-      allow read, write: if true;
-      // allow create, update: if isValidQuote();
-      // allow delete: if true;
+      allow read: if true; // Allow public read for now as per app usage
+      allow create, update: if isValidQuote();
+      allow delete: if isAdmin();
     }
 
     match /clients/{clientId} {
-      allow read, write: if true;
-      // allow create, update: if isValidClient();
-      // allow delete: if true;
+      allow read: if true; // Allow public read for now
+      allow create, update: if isValidClient();
+      allow delete: if isAdmin();
     }
 
     match /test/connection {
