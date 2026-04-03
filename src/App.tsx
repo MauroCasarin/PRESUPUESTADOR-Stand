@@ -118,6 +118,15 @@ const formatCurrency = (amount: number) => {
   }).format(amount);
 };
 
+const roundUpToNearest5000 = (value: number) => {
+  if (!value) return 0;
+  return Math.ceil(value / 5000) * 5000;
+};
+
+const formatRoundedCurrency = (value: number) => {
+  return formatCurrency(roundUpToNearest5000(value));
+};
+
 export default function App() {
   const [cliente, setCliente] = useState<string>('');
   const [cuit, setCuit] = useState<string>('');
@@ -188,11 +197,6 @@ export default function App() {
         return d.toLocaleDateString('es-AR');
       };
 
-      const roundUpToNearest5000 = (value: number) => {
-        if (!value) return 0;
-        return Math.ceil(value / 5000) * 5000;
-      };
-
       function numeroALetras(num: number): string {
         if (num === 0) return 'cero';
 
@@ -244,10 +248,6 @@ export default function App() {
 
         return getMillones(num).trim();
       }
-
-      const formatRoundedCurrency = (value: number) => {
-        return formatCurrency(roundUpToNearest5000(value));
-      };
 
       const formatRoundedText = (value: number) => {
         return numeroALetras(roundUpToNearest5000(value)) + ' pesos';
@@ -1168,7 +1168,7 @@ export default function App() {
                       };
                       generateDocument(quoteDetails);
                     }}
-                    className="w-full py-2 px-3 bg-purple-600 hover:bg-purple-500 text-white rounded-md text-xs font-medium transition-colors focus:ring-2 focus:ring-purple-500/20 outline-none flex items-center justify-center gap-1.5"
+                    className="w-full py-2 px-3 bg-purple-600 hover:bg-purple-500 text-white rounded-md text-xs font-medium transition-colors focus:ring-2 focus:ring-purple-500/20 outline-none flex items-center justify-center gap-1.5 hidden"
                   >
                     <Receipt className="w-3.5 h-3.5" />
                     Descargar Word
@@ -1650,11 +1650,11 @@ export default function App() {
                 {showSummaryDropdown && (
                   <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 relative group mb-4">
                     <p className="text-xs text-gray-800 font-mono leading-relaxed select-all pr-8">
-                      {selectedQuoteDetails.cliente} / STAND: {selectedQuoteDetails.evento} / {selectedQuoteDetails.fechaInicio ? new Date(selectedQuoteDetails.fechaInicio).toLocaleDateString('es-AR') : '-'} al {selectedQuoteDetails.fechaFin ? new Date(selectedQuoteDetails.fechaFin).toLocaleDateString('es-AR') : '-'} / {selectedQuoteDetails.selectedCity}{selectedQuoteDetails.lugarArmado ? ` - ${selectedQuoteDetails.lugarArmado}` : ''} / {selectedQuoteDetails.clientPaymentDays > 0 ? `Pago a ${selectedQuoteDetails.clientPaymentDays} días / ` : ''}{formatCurrency(selectedQuoteDetails.grandTotal)}
+                      {selectedQuoteDetails.cliente} / STAND: {selectedQuoteDetails.evento} / {selectedQuoteDetails.fechaInicio ? new Date(selectedQuoteDetails.fechaInicio).toLocaleDateString('es-AR') : '-'} al {selectedQuoteDetails.fechaFin ? new Date(selectedQuoteDetails.fechaFin).toLocaleDateString('es-AR') : '-'} / {selectedQuoteDetails.selectedCity}{selectedQuoteDetails.lugarArmado ? ` - ${selectedQuoteDetails.lugarArmado}` : ''} / {selectedQuoteDetails.clientPaymentDays > 0 ? `Pago a ${selectedQuoteDetails.clientPaymentDays} días / ` : ''}{formatRoundedCurrency(selectedQuoteDetails.grandTotal)}
                     </p>
                     <button 
                       onClick={() => {
-                        const text = `${selectedQuoteDetails.cliente} / STAND: ${selectedQuoteDetails.evento} / ${selectedQuoteDetails.fechaInicio ? new Date(selectedQuoteDetails.fechaInicio).toLocaleDateString('es-AR') : '-'} al ${selectedQuoteDetails.fechaFin ? new Date(selectedQuoteDetails.fechaFin).toLocaleDateString('es-AR') : '-'} / ${selectedQuoteDetails.selectedCity}${selectedQuoteDetails.lugarArmado ? ` - ${selectedQuoteDetails.lugarArmado}` : ''} / ${selectedQuoteDetails.clientPaymentDays > 0 ? `Pago a ${selectedQuoteDetails.clientPaymentDays} días / ` : ''}${formatCurrency(selectedQuoteDetails.grandTotal)}`;
+                        const text = `${selectedQuoteDetails.cliente} / STAND: ${selectedQuoteDetails.evento} / ${selectedQuoteDetails.fechaInicio ? new Date(selectedQuoteDetails.fechaInicio).toLocaleDateString('es-AR') : '-'} al ${selectedQuoteDetails.fechaFin ? new Date(selectedQuoteDetails.fechaFin).toLocaleDateString('es-AR') : '-'} / ${selectedQuoteDetails.selectedCity}${selectedQuoteDetails.lugarArmado ? ` - ${selectedQuoteDetails.lugarArmado}` : ''} / ${selectedQuoteDetails.clientPaymentDays > 0 ? `Pago a ${selectedQuoteDetails.clientPaymentDays} días / ` : ''}${formatRoundedCurrency(selectedQuoteDetails.grandTotal)}`;
                         navigator.clipboard.writeText(text);
                       }}
                       className="absolute top-2 right-2 p-1.5 bg-white border border-gray-200 rounded shadow-sm opacity-0 group-hover:opacity-100 transition-opacity text-gray-500 hover:text-blue-600"
@@ -1790,9 +1790,9 @@ export default function App() {
                   message += `*Tamaño:* ${details.selectedSize} m²\n\n`;
                   
                   message += `*DESGLOSE:*\n`;
-                  message += `- Stand Base: ${formatCurrency(details.basePrice)}\n`;
+                  message += `- Stand Base: ${formatRoundedCurrency(details.basePrice)}\n`;
                   if (details.selectedCity !== 'Cap.Fed') {
-                    message += `- Flete: ${formatCurrency(details.freightPrice)}\n`;
+                    message += `- Flete: ${formatRoundedCurrency(details.freightPrice)}\n`;
                   }
                   
                   // Adicionales
@@ -1809,7 +1809,7 @@ export default function App() {
                       const extraDef = EXTRAS.find(e => e.id === 'grafica');
                       if (extraDef) {
                         const extraPrice = extraDef.price * (1 + (details.ipcValue || 0) / 100) * totalArea;
-                        message += `• ${extraDef.name} (${totalArea.toFixed(2)} m²): ${formatCurrency(extraPrice)}\n`;
+                        message += `• ${extraDef.name} (${totalArea.toFixed(2)} m²): ${formatRoundedCurrency(extraPrice)}\n`;
                       }
                     }
                     
@@ -1831,20 +1831,20 @@ export default function App() {
                          }
                          extraPrice *= eventDays;
                       }
-                      message += `• ${extraDef.name} (x${qty}): ${formatCurrency(extraPrice)}\n`;
+                      message += `• ${extraDef.name} (x${qty}): ${formatRoundedCurrency(extraPrice)}\n`;
                     });
                     
                     // Extras personalizados
                     details.customExtras?.forEach((extra: any) => {
-                      message += `• ${extra.name}: ${formatCurrency(extra.price)}\n`;
+                      message += `• ${extra.name}: ${formatRoundedCurrency(extra.price)}\n`;
                     });
                   }
                   
                   if (details.clientPaymentDays > 0) {
-                    message += `\n*Recargo Financiero:* ${formatCurrency(details.financialSurchargeAmount)} (${details.clientPaymentDays} días)\n`;
+                    message += `\n*Recargo Financiero:* ${formatRoundedCurrency(details.financialSurchargeAmount)} (${details.clientPaymentDays} días)\n`;
                   }
                   
-                  message += `\n*TOTAL ESTIMADO: ${formatCurrency(details.grandTotal)}*`;
+                  message += `\n*TOTAL ESTIMADO: ${formatRoundedCurrency(details.grandTotal)}*`;
                   
                   const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
                   window.open(whatsappUrl, '_blank');
