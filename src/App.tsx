@@ -28,6 +28,9 @@ import {
 import { db } from './firebase';
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp, getDocFromServer } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
+import Docxtemplater from 'docxtemplater';
+import PizZip from 'pizzip';
+import { saveAs } from 'file-saver';
 
 registerLocale('es', es);
 
@@ -158,6 +161,173 @@ export default function App() {
   const [showSummaryDropdown, setShowSummaryDropdown] = useState(false);
   
   const [showTerminarModal, setShowTerminarModal] = useState(false);
+
+  const generateDocument = async (quoteDetails: any) => {
+    try {
+      // Fetch the template from the public folder
+      const response = await fetch('/presupuesto molde.docx');
+      if (!response.ok) {
+        throw new Error('No se pudo cargar el archivo de plantilla (presupuesto molde.docx). Asegúrate de que el archivo exista.');
+      }
+      const blob = await response.blob();
+      const arrayBuffer = await blob.arrayBuffer();
+
+      // Load the zip
+      const zip = new PizZip(arrayBuffer);
+
+      // Create docxtemplater instance
+      const doc = new Docxtemplater(zip, {
+        paragraphLoop: true,
+        linebreaks: true,
+      });
+
+      // Format dates
+      const formatDate = (dateString: string) => {
+        if (!dateString) return '';
+        const d = new Date(dateString);
+        return d.toLocaleDateString('es-AR');
+      };
+
+      const roundUpToNearest5000 = (value: number) => {
+        if (!value) return 0;
+        return Math.ceil(value / 5000) * 5000;
+      };
+
+      function numeroALetras(num: number): string {
+        if (num === 0) return 'cero';
+
+        const unidades = ['', 'un', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve'];
+        const decenas = ['diez', 'once', 'doce', 'trece', 'catorce', 'quince', 'dieciséis', 'diecisiete', 'dieciocho', 'diecinueve'];
+        const decenas2 = ['', '', 'veinte', 'treinta', 'cuarenta', 'cincuenta', 'sesenta', 'setenta', 'ochenta', 'noventa'];
+        const centenas = ['', 'ciento', 'doscientos', 'trescientos', 'cuatrocientos', 'quinientos', 'seiscientos', 'setecientos', 'ochocientos', 'novecientos'];
+
+        function getUnidades(n: number): string {
+          return unidades[n];
+        }
+
+        function getDecenas(n: number): string {
+          if (n < 10) return getUnidades(n);
+          if (n < 20) return decenas[n - 10];
+          if (n === 20) return 'veinte';
+          if (n < 30) return 'veinti' + getUnidades(n - 20);
+          const d = Math.floor(n / 10);
+          const u = n % 10;
+          return decenas2[d] + (u > 0 ? ' y ' + getUnidades(u) : '');
+        }
+
+        function getCentenas(n: number): string {
+          if (n === 100) return 'cien';
+          const c = Math.floor(n / 100);
+          const d = n % 100;
+          return centenas[c] + (d > 0 ? ' ' + getDecenas(d) : '');
+        }
+
+        function getMiles(n: number): string {
+          const m = Math.floor(n / 1000);
+          const c = n % 1000;
+          let res = '';
+          if (m === 1) res = 'mil';
+          else if (m > 1) res = getCentenas(m) + ' mil';
+          
+          return res + (c > 0 ? ' ' + getCentenas(c) : '');
+        }
+
+        function getMillones(n: number): string {
+          const m = Math.floor(n / 1000000);
+          const c = n % 1000000;
+          let res = '';
+          if (m === 1) res = 'un millón';
+          else if (m > 1) res = getMiles(m) + ' millones';
+          
+          return res + (c > 0 ? ' ' + getMiles(c) : '');
+        }
+
+        return getMillones(num).trim();
+      }
+
+      const formatRoundedCurrency = (value: number) => {
+        return formatCurrency(roundUpToNearest5000(value));
+      };
+
+      const formatRoundedText = (value: number) => {
+        return numeroALetras(roundUpToNearest5000(value)) + ' pesos';
+      };
+
+      // Prepare data
+      const tvDetails = [];
+      if (quoteDetails.extrasQty) {
+        if (quoteDetails.extrasQty['tv42'] > 0) tvDetails.push({ tamano: '42"', dias: quoteDetails.extrasQty['tv42'] });
+        if (quoteDetails.extrasQty['tv50'] > 0) tvDetails.push({ tamano: '50"', dias: quoteDetails.extrasQty['tv50'] });
+        if (quoteDetails.extrasQty['tv70'] > 0) tvDetails.push({ tamano: '70"', dias: quoteDetails.extrasQty['tv70'] });
+      }
+
+      const data = {
+        fechaPresupuesto: quoteDetails.createdAt?.toDate ? quoteDetails.createdAt.toDate().toLocaleDateString('es-AR') : new Date().toLocaleDateString('es-AR'),
+        cliente: quoteDetails.cliente || '',
+        cuit: quoteDetails.cuit || '',
+        evento: quoteDetails.evento || '',
+        fechaInicio: formatDate(quoteDetails.fechaInicio),
+        fechaFin: formatDate(quoteDetails.fechaFin),
+        ciudad: quoteDetails.selectedCity || '',
+        lugarArmado: quoteDetails.lugarArmado || '',
+        lote: quoteDetails.lote || '',
+        tamano: quoteDetails.selectedSize || '',
+        ancho: quoteDetails.standAncho || '',
+        profundo: quoteDetails.standProfundo || '',
+        
+        precioBase: formatRoundedCurrency(quoteDetails.basePrice || 0),
+        precioBaseTexto: formatRoundedText(quoteDetails.basePrice || 0),
+        
+        precioFlete: formatRoundedCurrency(quoteDetails.freightPrice || 0),
+        precioFleteTexto: formatRoundedText(quoteDetails.freightPrice || 0),
+        
+        totalExtras: formatRoundedCurrency(quoteDetails.extrasTotal || 0),
+        totalExtrasTexto: formatRoundedText(quoteDetails.extrasTotal || 0),
+        
+        subtotal: formatRoundedCurrency(quoteDetails.subtotal || 0),
+        subtotalTexto: formatRoundedText(quoteDetails.subtotal || 0),
+        
+        recargoFinanciero: formatRoundedCurrency(quoteDetails.financialSurchargeAmount || 0),
+        recargoFinancieroTexto: formatRoundedText(quoteDetails.financialSurchargeAmount || 0),
+        
+        total: formatRoundedCurrency(quoteDetails.grandTotal || 0),
+        totalTexto: formatRoundedText(quoteDetails.grandTotal || 0),
+        
+        diasPago: quoteDetails.clientPaymentDays || 0,
+        
+        // Conditional Extras
+        hasGraficas: quoteDetails.graficasList && quoteDetails.graficasList.length > 0,
+        graficasM2: quoteDetails.graficasList ? quoteDetails.graficasList.reduce((sum: number, g: any) => sum + (g.ancho * g.alto), 0).toFixed(2) : '0',
+        
+        hasCorporeo: !!(quoteDetails.extrasQty && quoteDetails.extrasQty['corporeo'] > 0),
+        corporeoM: quoteDetails.extrasQty ? quoteDetails.extrasQty['corporeo'] : 0,
+        
+        hasPiso: !!(quoteDetails.extrasQty && quoteDetails.extrasQty['piso'] > 0),
+        pisoM2: quoteDetails.extrasQty ? quoteDetails.extrasQty['piso'] : 0,
+        
+        hasAlfombra: !!(quoteDetails.extrasQty && quoteDetails.extrasQty['alfombra'] > 0),
+        alfombraM2: quoteDetails.extrasQty ? quoteDetails.extrasQty['alfombra'] : 0,
+        
+        hasTv: tvDetails.length > 0,
+        tvDetails: tvDetails,
+      };
+
+      // Set the template variables
+      doc.render(data);
+
+      // Generate the document
+      const out = doc.getZip().generate({
+        type: 'blob',
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      });
+
+      // Save the file
+      saveAs(out, `Presupuesto_${quoteDetails.cliente}_${quoteDetails.evento}.docx`);
+    } catch (error) {
+      console.error('Error generating document:', error);
+      alert('Hubo un error al generar el documento. Asegúrate de que el archivo "presupuesto_molde.doc" sea un archivo .docx válido (Word moderno).');
+    }
+  };
 
   useEffect(() => {
     if (!selectedQuoteDetails) {
@@ -971,6 +1141,38 @@ export default function App() {
                     <Save className="w-3.5 h-3.5" />
                     {isSaving ? 'Guardando...' : (editingId ? 'Actualizar Presupuesto' : 'Guardar Presupuesto')}
                   </button>
+                  <button 
+                    onClick={() => {
+                      const quoteDetails = {
+                        cliente,
+                        cuit,
+                        evento,
+                        fechaInicio: startDate ? startDate.toISOString() : null,
+                        fechaFin: endDate ? endDate.toISOString() : null,
+                        selectedCity,
+                        lugarArmado,
+                        lote,
+                        selectedSize: standAncho && standProfundo ? (parseFloat(standAncho) * parseFloat(standProfundo)).toString() : '0',
+                        standAncho,
+                        standProfundo,
+                        basePrice: calculateBasePrice(),
+                        freightPrice: calculateFreight(),
+                        extrasTotal: calculateExtrasTotal(),
+                        subtotal: calculateSubtotal(),
+                        financialSurchargeAmount: calculateFinancialSurcharge(),
+                        grandTotal: calculateGrandTotal(),
+                        clientPaymentDays,
+                        extrasQty,
+                        customExtras,
+                        graficasList
+                      };
+                      generateDocument(quoteDetails);
+                    }}
+                    className="w-full py-2 px-3 bg-purple-600 hover:bg-purple-500 text-white rounded-md text-xs font-medium transition-colors focus:ring-2 focus:ring-purple-500/20 outline-none flex items-center justify-center gap-1.5"
+                  >
+                    <Receipt className="w-3.5 h-3.5" />
+                    Descargar Word
+                  </button>
                   {editingId && (
                     <button 
                       onClick={cancelEdit}
@@ -1650,6 +1852,12 @@ export default function App() {
                 className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-md transition-colors"
               >
                 <Share2 className="w-4 h-4" /> COMPARTIR
+              </button>
+              <button 
+                onClick={() => generateDocument(selectedQuoteDetails)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-md transition-colors"
+              >
+                <Receipt className="w-4 h-4" /> Descargar Word
               </button>
               <button 
                 onClick={() => {
